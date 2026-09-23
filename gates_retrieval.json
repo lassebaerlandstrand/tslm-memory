@@ -1,0 +1,11 @@
+{
+ "status": "exploratory second step, fixed before any retrieval arm was trained or scored",
+ "metric": "mean AUROC within the 8 strata (finding x current state), seed-averaged p_yes, test set",
+ "interval": "as in gates.json: 95 %, SE_tot^2 = SE_boot^2 + Var(per-seed contrasts)/n_seeds; bootstrap within the 16 cells, B = 2000, seed 0",
+ "pool": "training subjects' query ECGs with their next ECG; neighbours by ECGFounder cosine, never the query's own subject; no test or validation subject in the pool",
+ "adapter": "ret: same samples, order, conditions and own-history draws as ctx, plus k_nb drawn uniformly from {0, 2, 4} neighbours",
+ "order": ["R1", "R2"],
+ "R1": "retrieval adds to memory: S-ret-both (3 own, 4 neighbours) minus S-ret-own (3 own): interval above 0 and every per-seed contrast above 0",
+ "R2": "what followed is read: S-ret-both minus S-ret-shuf (neighbours' next ECGs swapped within the same state for the finding): interval above 0 and every per-seed contrast above 0",
+ "reported": "S-ret-nb (4 neighbours, no own history) minus S-ret-k0; text-condition versions; statisticians with a vote over the neighbours' next ECGs"
+}
