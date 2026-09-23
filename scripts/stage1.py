@@ -11,8 +11,10 @@ Trains on records of training subjects (buckets 2-9); checks on records of valid
   0.05 per finding.
 The first version compared with a class-balanced probe and allowed a flat 0.05 gap. Seed 0 failed
 it on prolonged QT and ischemia while matching the unweighted probe, whose own gap is as large;
-the criteria were amended before any stage-2 run (gates.json keeps both). A saved adapter is
-evaluated without retraining. Usage: stage1.py seed
+the criteria were amended before any stage-2 run (gates.json keeps both). The first recipe (5
+epochs, no dropout, weight decay 0.01) then still failed the gap criterion on ischemia (0.103
+against 0.101) and was replaced by this one before any stage-2 run. A saved adapter is evaluated
+without retraining. Usage: stage1.py seed
 """
 
 import json
@@ -31,7 +33,7 @@ from tslm_context.mimic import FINDINGS
 from tslm_context.samples import Queries, machine_read
 from tslm_context.waves import DATA
 
-EPOCHS, BATCH, LR = 5, 32, 1e-3
+EPOCHS, BATCH, LR, WD = 3, 32, 1e-3, 0.05
 
 
 def records(q: Queries) -> np.ndarray:
@@ -66,7 +68,7 @@ def main(seed: int) -> None:
         epochs = 0
     else:
         epochs = EPOCHS
-    opt = torch.optim.AdamW(adapter.parameters(), lr=LR, weight_decay=0.01)
+    opt = torch.optim.AdamW(adapter.parameters(), lr=LR, weight_decay=WD)
     steps = max(1, epochs * (len(rec_tr) // BATCH))
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, LR, total_steps=steps, pct_start=0.03)
     t, step = time.time(), 0

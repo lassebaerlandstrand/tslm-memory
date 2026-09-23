@@ -33,6 +33,7 @@
    "bacc probe | sinus tachycardia": 0.97,
    "bacc probe | prolonged qt": 0.838,
    "bacc probe | st-t changes suggesting ischemia": 0.839
-  }
+  },
+  "then": "under the amended criteria seed 0 still failed the gap on ischemia (decoding gap 0.103, allowed 0.101); the stage-1 recipe changed from 5 epochs, no dropout, weight decay 0.01 to 3 epochs, dropout 0.1, weight decay 0.05, before any stage-2 run; the criteria stayed as amended"
  }
 }

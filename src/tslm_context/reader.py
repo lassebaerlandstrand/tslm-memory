@@ -41,10 +41,12 @@ class Adapter(nn.Module):
     def __init__(self, d_in: int = 1024, hidden: int = 1024, d_out: int = 128):
         super().__init__()
         self.d_out = d_out
+        # Dropout because without it the adapter memorised its training records (stage-1 gate).
         self.net = nn.Sequential(
             nn.LayerNorm(d_in),
             nn.Linear(d_in, hidden),
             nn.GELU(),
+            nn.Dropout(0.1),
             nn.Linear(hidden, N_TOKENS * d_out),
         )
 

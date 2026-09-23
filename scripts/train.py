@@ -37,7 +37,7 @@ def main(arm: str, seed: int) -> None:
     torch.manual_seed(seed)
     table = torch.as_tensor(np.load(DATA / "emb.npy"), device="cuda")
     model = reader.load()
-    adapter = reader.Adapter().cuda()
+    adapter = reader.Adapter().cuda().eval()
     adapter.load_state_dict(torch.load(f"runs/stage1_s{seed}.pt"))
     adapter.requires_grad_(False)
     frozen = [p.detach().clone() for p in adapter.parameters()]
