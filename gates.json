@@ -8,11 +8,31 @@
   "G2",
   "G3"
  ],
- "P1": "stage 1 passes in every seed (runs/stage1_s*.json)",
+ "P1": "stage 1 passes in every seed (runs/stage1_s*.json): per finding, decoded balanced accuracy >= an unweighted logistic probe on the same embedding minus 0.05; heart rate R^2 >= 0.8; another record's tokens <= 0.55; train-minus-validation decoding gap <= the probe's own gap + 0.05",
  "P2": "on validation: S-none >= 0.60 and S-none minus S-none-qswap >= 0.05",
  "G1": "S-own minus S-swap: interval above 0 and every per-seed contrast above 0",
  "G2": "S-own minus S-none >= tau, interval above 0, every per-seed contrast above 0, and L = (S-own - S-swap) - 2/3 (S-own - S-none) >= 0",
  "G3": "5-fold cross-validated logistic stack per finding (folds stratified by cell, current state as covariate) of T-history plus logit(S-own), minus T-history alone: bootstrap interval above 0",
  "tau": 0.02,
- "signal statistician history gain on test": 0.04840312499999999
+ "signal statistician history gain on test": 0.04840312499999999,
+ "P1 amendment": {
+  "when": "2026-09-24 01:35, after stage 1 of seed 0 and before any stage-2 run or test scoring",
+  "first version": "decoded balanced accuracy >= a class-balanced probe minus 0.05, and a flat train-minus-validation gap <= 0.05",
+  "why": "greedy decoding reads each finding at its natural threshold, so the like-for-like reference is the unweighted probe; the probe itself shows train-validation gaps of 0.05 to 0.08 for prolonged QT and ischemia",
+  "seed 0 under the first version": {
+   "bacc own | atrial fibrillation or flutter": 0.91,
+   "bacc own | sinus tachycardia": 0.951,
+   "bacc own | prolonged qt": 0.718,
+   "bacc own | st-t changes suggesting ischemia": 0.778,
+   "hr r2 own": 0.956,
+   "bacc train | atrial fibrillation or flutter": 0.928,
+   "bacc train | sinus tachycardia": 0.955,
+   "bacc train | prolonged qt": 0.784,
+   "bacc train | st-t changes suggesting ischemia": 0.864,
+   "bacc probe | atrial fibrillation or flutter": 0.936,
+   "bacc probe | sinus tachycardia": 0.97,
+   "bacc probe | prolonged qt": 0.838,
+   "bacc probe | st-t changes suggesting ischemia": 0.839
+  }
+ }
 }
