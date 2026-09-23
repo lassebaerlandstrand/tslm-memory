@@ -117,24 +117,33 @@ def loss(model, adapter: Adapter, table: torch.Tensor, batch: list[dict]) -> tor
 
 def lm_loss(model, adapter: Adapter, table: torch.Tensor, batch: list[dict]) -> torch.Tensor:
     """Next-token loss over a multi-token target (stage 1: the recording's own machine read),
-    appended without BOS and closed with EOS; right padding."""
+    appended without BOS and closed with EOS. Left padding puts every target at the end, so only
+    the last positions' logits are computed (all positions would need about 3 GB at batch 64)."""
     tok = model.tokenizer
-    embs, labels = [], []
-    for s in batch:
-        e = embed(model, adapter, table, s)
-        ids = tok(s["target"], add_special_tokens=False).input_ids + [tok.eos_token_id]
-        ids = torch.tensor(ids, device=e.device)
-        embs.append(torch.cat([e, model.llm.get_input_embeddings()(ids)]))
-        lab = torch.full((embs[-1].size(0),), -100, device=e.device)
-        lab[e.size(0) :] = ids
-        labels.append(lab)
+    targets = [
+        tok(s["target"], add_special_tokens=False).input_ids + [tok.eos_token_id] for s in batch
+    ]
+    embs = []
+    for s, ids in zip(batch, targets, strict=True):
+        ids = torch.tensor(ids, device="cuda")
+        embs.append(
+            torch.cat([embed(model, adapter, table, s), model.llm.get_input_embeddings()(ids)])
+        )
     n = max(e.size(0) for e in embs)
     x = embs[0].new_zeros(len(embs), n, embs[0].size(1))
-    y = torch.full((len(embs), n), -100, device=x.device)
     att = torch.zeros(len(embs), n, dtype=torch.long, device=x.device)
-    for i, (e, lab) in enumerate(zip(embs, labels, strict=True)):
-        x[i, : e.size(0)], y[i, : e.size(0)], att[i, : e.size(0)] = e, lab, 1
-    return model.llm(inputs_embeds=x, attention_mask=att, labels=y).loss
+    for i, e in enumerate(embs):
+        x[i, n - e.size(0) :], att[i, n - e.size(0) :] = e, 1
+    keep = max(len(t) for t in targets) + 1
+    # The logit at window position j predicts the token at j + 1.
+    y = torch.full((len(embs), keep), -100, device=x.device)
+    for i, t in enumerate(targets):
+        y[i, keep - 1 - len(t) : keep - 1] = torch.tensor(t, device=x.device)
+    pos = (att.cumsum(dim=1) - 1).clamp(min=0)
+    logits = model.llm(
+        inputs_embeds=x, attention_mask=att, position_ids=pos, logits_to_keep=keep
+    ).logits
+    return F.cross_entropy(logits.float().reshape(-1, logits.size(-1)), y.reshape(-1))
 
 
 @torch.no_grad()

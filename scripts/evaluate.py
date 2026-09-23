@@ -11,6 +11,7 @@ Usage: evaluate.py seed {val,test}
 """
 
 import json
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -49,6 +50,11 @@ def sample(q: Queries, i: int, world: str, k: int, control: str | None, partner:
 
 
 def main(seed: int, role: str) -> None:
+    if role == "test":
+        # The gates are fixed before the test set is scored: gates.json must be committed as is.
+        tracked = subprocess.run(["git", "ls-files", "--error-unmatch", "gates.json"], check=False)
+        clean = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "gates.json"], check=False)
+        assert tracked.returncode == 0 and clean.returncode == 0, "commit gates.json first"
     q = Queries(role)
     partner = q.swap_partners(seed=0)
     assert (partner >= 0).all() and (partner != np.arange(len(q))).all()

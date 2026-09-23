@@ -21,6 +21,7 @@ def auroc(name: str) -> float:
 
 def main() -> None:
     gain = auroc("S-history") - auroc("S-current")
+    assert gain > 0, f"signal statistician history gain {gain:.4f}: set tau by hand"
     tau = float(min(0.02, gain / 2))
     gates = {
         "metric": "mean AUROC within the 8 strata (finding x current state), seed-averaged p_yes",
@@ -32,8 +33,9 @@ def main() -> None:
         "G1": "S-own minus S-swap: interval above 0 and every per-seed contrast above 0",
         "G2": "S-own minus S-none >= tau, interval above 0, every per-seed contrast above 0, and "
         "L = (S-own - S-swap) - 2/3 (S-own - S-none) >= 0",
-        "G3": "5-fold cross-validated logistic stack per finding of T-history plus logit(S-own), "
-        "minus T-history alone: bootstrap interval above 0",
+        "G3": "5-fold cross-validated logistic stack per finding (folds stratified by cell, "
+        "current state as covariate) of T-history plus logit(S-own), minus T-history alone: "
+        "bootstrap interval above 0",
         "tau": tau,
         "signal statistician history gain on test": float(gain),
     }

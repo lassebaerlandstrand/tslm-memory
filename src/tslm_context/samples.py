@@ -40,17 +40,23 @@ def machine_read(row: pd.Series) -> str:
 
 def swap_partners(strata: np.ndarray, n_hist: np.ndarray, seed: int = 0) -> np.ndarray:
     """For each query, another query of the same stratum (finding, current state) with the same
-    number of history items, drawn without looking at the answer; -1 if it has no such peer."""
+    number of history items, drawn without looking at the answer. A query alone with its count
+    (an unusable earlier record dropped out) borrows a partner with more history; sample() uses
+    only as many of the partner's recordings as the query has."""
     rng = np.random.default_rng(seed)
     out = np.full(len(strata), -1)
     for s in np.unique(strata):
-        for n in np.unique(n_hist[strata == s]):
-            members = np.flatnonzero((strata == s) & (n_hist == n))
-            if len(members) < 2:
-                continue
-            perm = rng.permutation(members)
-            # A cyclic shift of a random permutation never maps a query to itself.
-            out[perm] = np.roll(perm, 1)
+        in_s = strata == s
+        for n in np.unique(n_hist[in_s]):
+            members = np.flatnonzero(in_s & (n_hist == n))
+            if len(members) >= 2:
+                perm = rng.permutation(members)
+                # A cyclic shift of a random permutation never maps a query to itself.
+                out[perm] = np.roll(perm, 1)
+            else:
+                richer = np.flatnonzero(in_s & (n_hist > n))
+                assert len(richer), (s, n)
+                out[members] = rng.choice(richer, len(members))
     return out
 
 

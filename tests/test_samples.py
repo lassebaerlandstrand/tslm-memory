@@ -18,6 +18,14 @@ def test_swap_partner_is_blind_to_the_answer_and_matches_count():
     assert 0.4 <= (y[p] == y).mean() <= 0.6
 
 
+def test_a_query_alone_with_its_history_count_borrows_a_richer_partner():
+    strata = np.array(["a"] * 5)
+    n_hist = np.array([1, 2, 2, 3, 3])
+    p = swap_partners(strata, n_hist, seed=0)
+    assert p[0] in (1, 2, 3, 4) and n_hist[p[0]] >= 1
+    assert (p != np.arange(5)).all() and (n_hist[p] >= n_hist).all()
+
+
 @pytest.fixture(scope="module")
 def queries(ecgs):
     q = select(ecgs, PER_CELL, reserve=0.0)

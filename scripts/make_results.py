@@ -1,8 +1,10 @@
 """Evaluate the gates in gates.json and write runs/results.json and the LaTeX macros for the
 proposal (../proposal/tslm-context-results.tex). Prints aggregates only."""
 
+import itertools
 import json
 import re
+import subprocess
 from glob import glob
 from pathlib import Path
 
@@ -15,22 +17,31 @@ from tslm_context.grade import auroc_within, bootstrap, ci
 from tslm_context.samples import Queries
 
 OUT = Path(__file__).resolve().parents[2] / "proposal" / "tslm-context-results.tex"
+SEEDS = [0, 1, 2]
 
 
 def load(role: str) -> tuple[dict[str, np.ndarray], pd.DataFrame]:
-    """Per arm: p_yes [n, seeds]; plus the shared query frame (y, stratum, cell)."""
+    """Per arm: p_yes [n, seeds] in seed order; plus the shared query frame (y, stratum, cell)."""
     arms, base = {}, None
     for path in sorted(glob(f"runs/eval/{role}/*_s*.jsonl")):
-        arm = re.sub(r"_s\d+\.jsonl$", "", Path(path).name)
-        d = pd.read_json(path, lines=True).sort_values("i").reset_index(drop=True)
+        m = re.fullmatch(r"(.+)_s(\d+)\.jsonl", Path(path).name)
+        d = (
+            pd.read_json(path, lines=True, dtype={"cell": str})
+            .sort_values("i")
+            .reset_index(drop=True)
+        )
         if base is None:
             base = d[["i", "finding", "cell", "stratum", "y", "n_hist"]]
         assert (d.i.to_numpy() == base.i.to_numpy()).all()
-        arms.setdefault(arm, []).append(d.p_yes.to_numpy())
+        arms.setdefault(m[1], {})[int(m[2])] = d.p_yes.to_numpy()
+    for arm, by_seed in arms.items():
+        assert sorted(by_seed) == SEEDS, (role, arm, sorted(by_seed))
+    out = {k: np.stack([v[s] for s in SEEDS], axis=1) for k, v in arms.items()}
     for path in sorted(glob(f"runs/baselines/{role}/*.jsonl")):
-        d = pd.read_json(path, lines=True).sort_values("i")
-        arms["stat:" + Path(path).stem] = [d.p_yes.to_numpy()]
-    return {k: np.stack(v, axis=1) for k, v in arms.items()}, base
+        d = pd.read_json(path, lines=True).sort_values("i").reset_index(drop=True)
+        assert (d.i.to_numpy() == base.i.to_numpy()).all()
+        out["stat:" + Path(path).stem] = d.p_yes.to_numpy()[:, None]
+    return out, base
 
 
 class Scores:
@@ -67,12 +78,15 @@ def stack(sc: Scores, base: pd.DataFrame) -> dict:
 
     t = logit(sc.arms["stat:T-history"][:, 0])
     s = logit(sc.arms["S-own"].mean(axis=1))
+    # y does not depend on the current state by design (balanced cells), so without the state as
+    # a covariate a reader's state offset would look like noise and shrink its weight.
+    now = base.cell.str[0].astype(float).to_numpy()
     both, alone = np.zeros(len(t)), np.zeros(len(t))
     for f in base.finding.unique():
         m = np.flatnonzero((base.finding == f).to_numpy())
         folds = StratifiedKFold(5, shuffle=True, random_state=0)
-        for tr, te in folds.split(m, sc.y[m]):
-            for x, out in ((np.c_[t, s], both), (t[:, None], alone)):
+        for tr, te in folds.split(m, base.cell.to_numpy()[m]):
+            for x, out in ((np.c_[t, s, now], both), (np.c_[t, now], alone)):
                 clf = LogisticRegression().fit(x[m[tr]], sc.y[m[tr]])
                 out[m[te]] = clf.decision_function(x[m[te]])
     sc.arms["stack:T-history+S-own"], sc.arms["stack:T-history"] = both[:, None], alone[:, None]
@@ -100,11 +114,15 @@ def macro(key: str) -> str:
 
 
 def main() -> None:
+    tracked = subprocess.run(["git", "ls-files", "--error-unmatch", "gates.json"], check=False)
+    clean = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "gates.json"], check=False)
+    assert tracked.returncode == 0 and clean.returncode == 0, "gates.json must be committed as is"
     gates = json.loads(Path("gates.json").read_text())
     res = {}
     arms, base = load("val")
     val = Scores(arms, base)
-    res["P1"] = all(json.loads(Path(p).read_text())["pass"] for p in glob("runs/stage1_s*.json"))
+    stage1 = [json.loads(Path(f"runs/stage1_s{k}.json").read_text()) for k in SEEDS]
+    res["P1"] = all(r["pass"] for r in stage1)
     res["val S-none"] = val.auc("S-none")
     res["val S-none minus qswap"] = val.auc("S-none") - val.auc("S-none-qswap")
     res["P2"] = res["val S-none"] >= 0.60 and res["val S-none minus qswap"] >= 0.05
@@ -113,14 +131,19 @@ def main() -> None:
     sc = Scores(arms, base)
     for arm in sorted(sc.arms):
         res[f"auroc {arm}"] = sc.auc(arm)
+        n = sc.arms[arm].shape[1]
+        per_seed = [sc.auc(arm, seed=k) for k in range(n)] if n > 1 else []
+        boots = bootstrap(lambda i, a=arm: sc.auc(a, i), sc.cells, n=1000)
+        res[f"auroc {arm} ci"] = ci(res[f"auroc {arm}"], boots, per_seed)
     g1 = sc.contrast("S-own", "S-swap")
     g2 = sc.contrast("S-own", "S-none")
     res["S-own minus S-swap"], res["S-own minus S-none"] = g1, g2
-    res["G1"] = g1["lo"] > 0 and all(x > 0 for x in g1["per_seed"])
+    res["G1"] = g1["lo"] > 0 and len(g1["per_seed"]) == 3 and all(x > 0 for x in g1["per_seed"])
     res["L"] = g1["est"] - 2 / 3 * g2["est"]
     res["G2"] = (
         g2["est"] >= gates["tau"]
         and g2["lo"] > 0
+        and len(g2["per_seed"]) == 3
         and all(x > 0 for x in g2["per_seed"])
         and res["L"] >= 0
     )
@@ -142,14 +165,27 @@ def main() -> None:
     res["label-silent share"] = float(silent.mean())
     res["label-silent S-own minus S-swap"] = sc.contrast("S-own", "S-swap", silent)
     gain = res["stat:S-history minus stat:S-current"]["est"]
-    res["reader gain as share of statistician gain"] = g2["est"] / gain if gain > 0 else None
-    res["gates passed"] = [g for g in gates["order"] if res[g]]
+    if gain > 0:
+        res["reader gain as share of statistician gain"] = g2["est"] / gain
+    # Gates are read in order: a later gate counts only if every earlier one passed.
+    res["gates passed"] = list(itertools.takewhile(lambda g: res[g], gates["order"]))
+    res["tau"] = gates["tau"]
+    res["n test"], res["n val"], res["n train"] = len(sc.y), len(val.y), len(Queries("train"))
+    sel = json.loads(Path("runs/selection.json").read_text())
+    res["n pairs"], res["n mimic ecgs"] = sel["n pairs"], sel["n ecgs"]
+    enc = json.loads(Path("runs/encoder_check.json").read_text())
+    res["encoder spread"] = enc["encoder output spread across tokens"]
+    res["encoder magnitude"] = enc["encoder output magnitude"]
+    res["encoder soft tokens"] = enc["n_soft_tokens"]
+    res["encoder distinct tokens"] = enc["distinct bf16 soft tokens"]
     Path("runs/results.json").write_text(json.dumps(res, indent=1, default=float))
 
     lines = ["% Generated by tslm-context/scripts/make_results.py. Do not edit."]
     for k, v in res.items():
         if isinstance(v, bool):
             lines.append(f"\\newcommand{{\\{macro(k)}}}{{{'passed' if v else 'failed'}}}")
+        elif isinstance(v, int):
+            lines.append(f"\\newcommand{{\\{macro(k)}}}{{{v:,}}}".replace(",", "{,}"))
         elif isinstance(v, float):
             lines.append(f"\\newcommand{{\\{macro(k)}}}{{{fmt(v)}}}")
         elif isinstance(v, dict):
@@ -168,6 +204,9 @@ def main() -> None:
 
 
 def fmt(x: float, sign: bool = False) -> str:
+    if not sign and x != 0 and abs(x) < 1e-3:
+        mant, exp = f"{x:.1e}".split("e")
+        return f"${mant}\\times 10^{{{int(exp)}}}$"
     s = f"{x:+.3f}" if sign else f"{x:.3f}"
     s = s.replace("-0.000", "0.000").replace("+0.000", "0.000")
     return s.replace("-", "\\textminus ")

@@ -45,6 +45,9 @@ def main(arm: str, seed: int) -> None:
     params = [p for n, p in model.llm.named_parameters() if "lora_" in n]
     for p in params:
         p.requires_grad = True
+    # Text-world samples with three earlier ECGs reach about 450 tokens; without checkpointing a
+    # batch of 16 needs more than 16 GB.
+    model.llm.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.llm.train()
     opt = torch.optim.AdamW(params, lr=LR, weight_decay=WD)
     steps = len(order) // BATCH

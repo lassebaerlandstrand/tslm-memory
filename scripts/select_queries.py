@@ -4,6 +4,9 @@ Writes data/ecgs.parquet (canonical table), data/queries.parquet and data/fetch.
 only.
 """
 
+import json
+from pathlib import Path
+
 import numpy as np
 
 from tslm_context.mimic import canonical_table
@@ -33,6 +36,9 @@ def main() -> None:
             f"median days since last earlier ECG {np.nanmedian(r.hist_days_0):.1f}"
         )
     print(f"records to fetch {len(studies)}, files {len(files)}")
+    Path("runs").mkdir(exist_ok=True)
+    counts = {"n ecgs": len(ecgs), "n pairs": int(q.attrs["n_pairs"]), "n records": len(studies)}
+    Path("runs/selection.json").write_text(json.dumps(counts, indent=1))
 
 
 if __name__ == "__main__":

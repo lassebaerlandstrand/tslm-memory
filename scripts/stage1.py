@@ -6,7 +6,8 @@ Trains on records of training subjects (buckets 2-9); checks on records of valid
 - per finding, balanced accuracy of the decoded labels >= a logistic probe on the same frozen
   embedding minus 0.05;
 - heart rate decoded from the tokens has R^2 >= 0.8;
-- decoding from another record's tokens gives balanced accuracy <= 0.55 per finding.
+- decoding from another record's tokens gives balanced accuracy <= 0.55 per finding;
+- decoding on training records is at most 0.05 better than on validation records per finding.
 Usage: stage1.py seed
 """
 
@@ -26,7 +27,7 @@ from tslm_context.mimic import FINDINGS
 from tslm_context.samples import Queries, machine_read
 from tslm_context.waves import DATA
 
-EPOCHS, BATCH, LR = 5, 64, 1e-3
+EPOCHS, BATCH, LR = 5, 32, 1e-3
 
 
 def records(q: Queries) -> np.ndarray:
@@ -95,22 +96,28 @@ def main(seed: int) -> None:
     adapter.eval()
     out = Path("runs")
     torch.save(adapter.state_dict(), out / f"stage1_s{seed}.pt")
-    shuffled = rng.permutation(rec_va)
+    # Decoding on training records too: a gap to validation would mean the MLP memorised them,
+    # and stage 2 would train on cleaner tokens than it is tested on.
+    seen = rng.choice(rec_tr, len(rec_va), replace=False)
     res = {"seed": seed, "n_train_records": len(rec_tr), "n_val_records": len(rec_va)}
-    for name, source in (("own", rec_va), ("swapped", shuffled)):
+    for name, q, recs, source in (
+        ("own", va, rec_va, rec_va),
+        ("swapped", va, rec_va, rng.permutation(rec_va)),
+        ("train", tr, seen, seen),
+    ):
         texts = []
-        for s in range(0, len(rec_va), 64):
-            batch = [item(va, x) for x in source[s : s + 64]]
+        for s in range(0, len(recs), 64):
+            batch = [item(q, x) for x in source[s : s + 64]]
             texts += reader.generate(model, adapter, table, batch)
         dec = [decoded(x) for x in texts]
         for f in FINDINGS:
-            y = np.array([f in va.ecgs.loc[x, "labels"] for x in rec_va])
+            y = np.array([f in q.ecgs.loc[x, "labels"] for x in recs])
             pred = np.array([f in d for d, _ in dec])
             res[f"bacc {name} | {f}"] = balanced_accuracy_score(y, pred)
-        hr = va.ecgs.loc[rec_va, "hr"].to_numpy()
+        hr = q.ecgs.loc[recs, "hr"].to_numpy()
         got = np.array([r for _, r in dec])
         ok = ~np.isnan(hr) & ~np.isnan(got)
-        res[f"hr r2 {name}"] = r2_score(hr[ok], got[ok])
+        res[f"hr r2 {name}"] = r2_score(hr[ok], got[ok]) if ok.sum() > 1 else float("nan")
         res[f"hr decoded share {name}"] = float(ok.mean())
     emb = table.cpu().numpy()
     for f in FINDINGS:
@@ -125,6 +132,7 @@ def main(seed: int) -> None:
         all(res[f"bacc own | {f}"] >= res[f"bacc probe | {f}"] - 0.05 for f in FINDINGS)
         and res["hr r2 own"] >= 0.8
         and all(res[f"bacc swapped | {f}"] <= 0.55 for f in FINDINGS)
+        and all(res[f"bacc train | {f}"] - res[f"bacc own | {f}"] <= 0.05 for f in FINDINGS)
     )
     (out / f"stage1_s{seed}.json").write_text(json.dumps(res, indent=1))
     for k, v in res.items():

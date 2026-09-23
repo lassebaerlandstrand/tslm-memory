@@ -71,7 +71,9 @@ def select(
         q[f"hist_study_{j}"] = np.where(ok, study[h[:, j]], -1)
         q[f"hist_days_{j}"] = np.where(ok, (t[p.cur] - t[h[:, j]]) / np.timedelta64(1, "D"), np.nan)
     q["n_hist"] = (h >= 0).sum(axis=1)
-    return q.drop(columns="pair")
+    q = q.drop(columns="pair")
+    q.attrs["n_pairs"] = len(pairs)
+    return q
 
 
 def to_fetch(q: pd.DataFrame) -> np.ndarray:
