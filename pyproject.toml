@@ -28,6 +28,9 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.16.7",
 ]
+fetch = [
+    "kaggle>=2.2.4",
+]
 
 [tool.ruff]
 line-length = 100

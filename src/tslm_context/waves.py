@@ -1,6 +1,5 @@
-"""12-lead waveforms at 100 Hz in one memory-mapped array per source, as OpenTSLM reads them."""
+"""12-lead MIMIC-IV-ECG records at 500 Hz in PTB-XL lead order."""
 
-from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import numpy as np
@@ -10,23 +9,12 @@ DATA = Path(__file__).resolve().parents[2] / "data"
 PTBXL_LEADS = ["I", "II", "III", "aVR", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"]
 
 
-def read_100hz(path: str, leads: list[str] | None = None) -> np.ndarray:
-    # OpenTSLM decimates the 500 Hz record by taking every fifth sample.
-    rec = wfdb.rdrecord(path)
-    sig = rec.p_signal
-    if leads is not None:
-        sig = sig[:, [rec.sig_name.index(name) for name in leads]]
-    return sig[::5][:1000].astype(np.float32)
+def read500(path: str) -> np.ndarray:
+    """[5000, 12] in mV. MIMIC stores aVF before aVL, so leads are picked by name."""
+    rec = wfdb.rdrecord(str(DATA / "mimic" / path))
+    return rec.p_signal[:5000, [rec.sig_name.index(n) for n in PTBXL_LEADS]].astype(np.float32)
 
 
-def build(paths: list[str], out: Path, leads: list[str] | None = None) -> np.ndarray:
-    arr = np.lib.format.open_memmap(out, mode="w+", dtype=np.float32, shape=(len(paths), 1000, 12))
-    with ProcessPoolExecutor(16) as ex:
-        for i, sig in enumerate(ex.map(read_100hz, paths, [leads] * len(paths), chunksize=64)):
-            arr[i] = sig
-    arr.flush()
-    return arr
-
-
-def load(name: str) -> np.ndarray:
-    return np.load(DATA / f"{name}.npy", mmap_mode="r")
+def unusable(sig: np.ndarray) -> bool:
+    """A lead missing throughout, or every lead flat. Short dropouts are set to 0 elsewhere."""
+    return bool(np.isnan(sig).all(axis=0).any() or (np.nanstd(sig, axis=0) < 1e-3).all())

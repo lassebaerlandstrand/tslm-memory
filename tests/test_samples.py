@@ -1,0 +1,70 @@
+import numpy as np
+import pandas as pd
+import pytest
+
+from tslm_context.samples import Queries, swap_partners
+from tslm_context.selection import select
+
+PER_CELL = {"test": 6, "val": 1, "train": 3}
+
+
+def test_swap_partner_is_blind_to_the_answer_and_matches_count():
+    strata = np.array(["a"] * 300 + ["b"] * 300)
+    n_hist = np.tile([2, 3], 300)
+    y = np.r_[np.zeros(150), np.ones(150), np.zeros(150), np.ones(150)]  # ordered by answer
+    p = swap_partners(strata, n_hist, seed=0)
+    assert (p != np.arange(600)).all() and (p >= 0).all()
+    assert (strata[p] == strata).all() and (n_hist[p] == n_hist).all()
+    assert 0.4 <= (y[p] == y).mean() <= 0.6
+
+
+@pytest.fixture(scope="module")
+def queries(ecgs):
+    q = select(ecgs, PER_CELL, reserve=0.0)
+    by_study = ecgs.set_index("study_id").copy()
+    # The next ECG carries a sentinel label and has no embedding row, as it is never fetched.
+    by_study["labels"] = by_study.labels.astype(object)
+    for s in q.next_study:
+        by_study.at[s, "labels"] = ["SENTINEL"]
+    fetched = set(q.cur_study) | {s for j in range(3) for s in q[f"hist_study_{j}"] if s >= 0}
+    row = pd.Series(np.arange(len(by_study)), index=by_study.index)
+    row[~row.index.isin(list(fetched))] = -1
+    return Queries("test", (q, by_study, row), PER_CELL), q
+
+
+def text_of(sample: dict) -> str:
+    return "".join(x for kind, x in sample["segments"] if kind == "text")
+
+
+def test_arms_never_read_the_next_ecg_except_the_oracle(queries):
+    qs, q = queries
+    nxt_rows = set(qs.row[q.next_study].tolist())
+    partner = qs.swap_partners()
+    for i in range(len(qs)):
+        for world in ("signal", "text"):
+            for kwargs in ({}, {"partner": int(partner[i])}, {"query_from": int(partner[i])}):
+                s = qs.sample(i, world, 3, **kwargs)
+                assert "SENTINEL" not in text_of(s)
+                rows = [x for kind, x in s["segments"] if kind == "ecg"]
+                assert -1 not in rows and not nxt_rows & set(rows)
+        assert "SENTINEL" in text_of(qs.sample(i, "text", 3, oracle=True))
+
+
+def test_signal_world_has_no_machine_read_and_swap_keeps_offsets(queries):
+    qs, _ = queries
+    partner = qs.swap_partners()
+    for i in range(len(qs)):
+        own, swapped = qs.sample(i, "signal", 3), qs.sample(i, "signal", 3, partner=int(partner[i]))
+        assert "Machine read" not in text_of(own)
+        assert text_of(own) == text_of(swapped)  # same offsets, count and question
+        rows = lambda s: [x for kind, x in s["segments"] if kind == "ecg"]  # noqa: E731
+        assert rows(own)[0] == rows(swapped)[0]  # the query recording stays
+        assert set(rows(own)[1:]).isdisjoint(rows(swapped)[1:])
+
+
+def test_none_and_k0_differ_from_own_only_in_the_history(queries):
+    qs, _ = queries
+    for i in range(len(qs)):
+        k0, own = text_of(qs.sample(i, "text", 0)), text_of(qs.sample(i, "text", 3))
+        assert "Earlier ECGs" not in k0 and "Earlier ECGs" in own
+        assert own.endswith(k0[k0.index("\n\nQuestion:") :])

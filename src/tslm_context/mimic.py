@@ -1,4 +1,5 @@
-"""MIMIC-IV-ECG machine statements as canonical labels, next-ECG pairs, and the subject split.
+"""MIMIC-IV-ECG machine statements as canonical labels, next-ECG pairs, own history, and the subject
+split.
 
 Only canonical labels ever leave this module, so no raw machine text reaches a prompt or a log.
 """
@@ -11,10 +12,11 @@ import pandas as pd
 
 from tslm_context.waves import DATA
 
-# Qualified statements do not count as the finding ("incomplete RBBB" is not RBBB).
-QUALIFIED = re.compile(
-    r"incomplete|borderline|possible|probable|consider|cannot|no longer|replaced"
-)
+# A qualifier makes a finding "possible" when it precedes the finding within the same clause
+# ("probable atrial fibrillation"), not when it belongs to another clause of the line
+# ("sinus tachycardia with borderline first degree A-V block").
+QUALIFIER = re.compile(r"incomplete|borderline|possible|probable|consider|cannot")
+CLAUSE = re.compile(r" with |,|;| and | - ")
 
 LABELS = {
     "sinus rhythm": r"sinus rhythm",
@@ -48,20 +50,23 @@ FINDINGS = [
     "st-t changes suggesting ischemia",
 ]
 
+MEASURES = ["hr", "pr", "qrs", "qt", "qtc", "p_axis", "qrs_axis", "t_axis"]
 
-def labels_of(lines: list[str]) -> list[str]:
-    found = []
+
+def labels_of(lines: list[str]) -> tuple[list[str], list[str]]:
+    """(definite labels, labels mentioned only with a qualifier), in LABELS order."""
+    definite, possible = set(), set()
     for line in lines:
         text = line.lower()
-        if QUALIFIED.search(text):
-            continue
         for name, pattern in LABELS.items():
-            if name not in found and re.search(pattern, text):
-                found.append(name)
-    return found
-
-
-MEASURES = ["hr", "pr", "qrs", "qt", "qtc", "p_axis", "qrs_axis", "t_axis"]
+            for m in re.finditer(pattern, text):
+                starts = [c.end() for c in CLAUSE.finditer(text, 0, m.start())]
+                clause = text[starts[-1] if starts else 0 : m.start()]
+                (possible if QUALIFIER.search(clause) else definite).add(name)
+    return (
+        [n for n in LABELS if n in definite],
+        [n for n in LABELS if n in possible and n not in definite],
+    )
 
 
 def measures(mm: pd.DataFrame) -> pd.DataFrame:
@@ -84,49 +89,71 @@ def measures(mm: pd.DataFrame) -> pd.DataFrame:
 
 
 def canonical_table() -> pd.DataFrame:
-    """One row per ECG: subject, study, time, path, canonical labels and machine measures."""
+    """One row per ECG, sorted by subject and time, with a RangeIndex: subject, study, time, path,
+    canonical labels, qualified-only labels and machine measures."""
     mm = pd.read_csv(DATA / "mimic" / "machine_measurements.csv", low_memory=False)
     rl = pd.read_csv(DATA / "mimic" / "record_list.csv", usecols=["study_id", "path"])
     reports = mm[[f"report_{i}" for i in range(18)]].astype("string").fillna("")
-    mm["labels"] = [labels_of([x for x in row if x]) for row in reports.itertuples(index=False)]
-    mm = pd.concat([mm, measures(mm)], axis=1)
-    out = mm[["subject_id", "study_id", "ecg_time", "labels", *MEASURES]].merge(rl, on="study_id")
+    found = [labels_of([x for x in row if x]) for row in reports.itertuples(index=False)]
+    mm["labels"] = [d for d, _ in found]
+    mm["possible"] = [p for _, p in found]
+    mm = pd.concat([mm.drop(columns=["p_axis", "qrs_axis", "t_axis"]), measures(mm)], axis=1)
+    cols = ["subject_id", "study_id", "ecg_time", "labels", "possible", *MEASURES]
+    out = mm[cols].merge(rl, on="study_id")
     out["ecg_time"] = pd.to_datetime(out.ecg_time)
     return out.sort_values(["subject_id", "ecg_time"]).reset_index(drop=True)
+
+
+def _key(ecgs: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    """Per-row subject code and a sortable (subject, minute) key. Rows must be sorted by subject
+    and time under a RangeIndex, so row labels and positions agree."""
+    assert ecgs.index.equals(pd.RangeIndex(len(ecgs)))
+    code = pd.factorize(ecgs.subject_id)[0].astype(np.int64)
+    minutes = (ecgs.ecg_time.to_numpy() - np.datetime64("2000-01-01")) // np.timedelta64(1, "m")
+    key = code * 10**9 + minutes.astype(np.int64)
+    assert (np.diff(key) >= 0).all()
+    return code, key
 
 
 def next_pairs(ecgs: pd.DataFrame, min_h: float = 1.0, max_d: float = 365.0) -> pd.DataFrame:
     """For each ECG, the first later ECG of the same subject at least min_h hours and at most max_d
     days later. Times are only compared within one subject (MIMIC shifts dates per subject)."""
-    rows = []
-    for sid, g in ecgs.groupby("subject_id", sort=False):
-        t = g.ecg_time.to_numpy()
-        for i in range(len(g) - 1):
-            gap = (t[i + 1 :] - t[i]) / np.timedelta64(1, "h")
-            ok = np.flatnonzero(gap >= min_h)
-            if len(ok) and gap[ok[0]] <= max_d * 24:
-                j = i + 1 + ok[0]
-                rows.append((sid, g.index[i], g.index[j], gap[ok[0]] / 24))
-    return pd.DataFrame(rows, columns=["subject_id", "cur", "nxt", "gap_days"])
+    code, key = _key(ecgs)
+    rows = np.arange(len(ecgs))
+    nxt = np.searchsorted(key, key + int(min_h * 60), side="left")
+    ok = nxt < len(ecgs)
+    ok[ok] &= code[nxt[ok]] == code[rows[ok]]
+    gap = np.full(len(ecgs), np.inf)
+    gap[ok] = (key[nxt[ok]] - key[rows[ok]]) / (60 * 24)
+    ok &= gap <= max_d
+    return pd.DataFrame(
+        {
+            "subject_id": ecgs.subject_id.to_numpy()[ok],
+            "cur": rows[ok],
+            "nxt": nxt[ok],
+            "gap_days": gap[ok],
+        }
+    )
 
 
 def earlier(ecgs: pd.DataFrame, rows: np.ndarray, n: int, min_h: float = 1.0) -> np.ndarray:
-    """The n most recent ECGs of the same subject recorded at least min_h hours before each row,
-    most recent first; -1 where there are fewer. ecgs must be sorted by subject and time."""
-    code = pd.factorize(ecgs.subject_id)[0].astype(np.int64)
-    minutes = (ecgs.ecg_time.to_numpy() - np.datetime64("2000-01-01")) // np.timedelta64(1, "m")
-    key = code * 10**9 + minutes.astype(np.int64)
-    assert (np.diff(key) >= 0).all()
+    """Own history: up to n earlier ECGs of the same subject, most recent first, each at least
+    min_h hours before the previous one (the first before the row itself). -1 where there are
+    fewer."""
+    code, key = _key(ecgs)
     rows = np.asarray(rows)
-    last = np.searchsorted(key, key[rows] - int(min_h * 60), side="right") - 1
     out = np.full((len(rows), n), -1, dtype=np.int64)
+    ref = rows.copy()
+    alive = np.ones(len(rows), dtype=bool)
     for j in range(n):
-        idx = last - j
-        ok = (idx >= 0) & (code[np.maximum(idx, 0)] == code[rows])
-        out[:, j] = np.where(ok, idx, -1)
+        idx = np.searchsorted(key, key[ref] - int(min_h * 60), side="right") - 1
+        alive &= (idx >= 0) & (code[np.maximum(idx, 0)] == code[rows])
+        out[alive, j] = idx[alive]
+        ref = np.where(alive, idx, ref)
     return out
 
 
 def bucket(subject_id: int) -> int:
-    """0 = test queries, 1 = validation, 2..9 = index pool. Stable across runs."""
-    return int(hashlib.md5(str(subject_id).encode()).hexdigest(), 16) % 10
+    """0 = test queries, 1 = validation, 2..9 = training and pool. Stable across runs."""
+    assert isinstance(subject_id, int | np.integer), type(subject_id)
+    return int(hashlib.md5(str(int(subject_id)).encode()).hexdigest(), 16) % 10
