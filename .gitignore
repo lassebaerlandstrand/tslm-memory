@@ -1,0 +1,16 @@
+notes/
+data/
+runs/
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.env
+*.pt
+*.ckpt
+*.safetensors
+.ipynb_checkpoints/
+.claude/settings.local.json
+CLAUDE.local.md
+/AGENTS.md
+/CLAUDE.md

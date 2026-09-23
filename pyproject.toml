@@ -1,0 +1,42 @@
+[project]
+name = "tslm-context"
+version = "0.1.0"
+description = "A time-series language model that reads other recordings: the person's own earlier ones and similar people's with what followed"
+readme = "README.md"
+authors = [
+    { name = "Lasse Bærland Strand", email = "lstrand.research@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "matplotlib>=3.11.2",
+    "numpy>=2.5.3",
+    "opentslm",
+    "pandas>=3.0.6",
+    "pyarrow>=25.0.1",
+    "python-dotenv>=1.2.3",
+    "scikit-learn>=1.9.1",
+    "torch>=2.14.0",
+    "wfdb>=4.3.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.9,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.7",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.uv.sources]
+opentslm = { git = "https://github.com/OpenTSLM/OpenTSLM", rev = "2968f4b891baab4307f7e9d0043e87677b593a30" }
