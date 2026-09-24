@@ -3,7 +3,7 @@
 The frozen reader on the fresh confirmation patients: without history, with only the dates of the
 patient's earlier ECGs, with the earlier ECGs themselves, and with another patient's. Style
 follows the Agentic-AutoRAG paper's _figstyle.py (Type-42 fonts outlined with Ghostscript) with
-the Okabe-Ito colours of the TikZ figure, in TeX Gyre Termes to match the ACL template's Times. A
+the Okabe-Ito colours of the TikZ figure, in Latin Modern to match the proposal's body font. A
 sidecar records the inputs, git commit and date.
 """
 
@@ -31,13 +31,13 @@ BARS = [
 
 
 def style() -> None:
-    for f in glob.glob("/usr/share/texmf/fonts/opentype/public/tex-gyre/texgyretermes-*.otf"):
+    for f in glob.glob("/usr/share/texmf/fonts/opentype/public/lm/lmroman10-*.otf"):
         fm.fontManager.addfont(f)
     mpl.rcParams.update(
         {
             "pdf.fonttype": 42,
             "font.family": "serif",
-            "font.serif": ["TeX Gyre Termes", "STIX Two Text", "DejaVu Serif"],
+            "font.serif": ["Latin Modern Roman", "DejaVu Serif"],
             "font.size": 9.5,
             "axes.labelsize": 9.5,
             "xtick.labelsize": 8.5,
