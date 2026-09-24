@@ -1,4 +1,7 @@
-"""Stage 2: continue the released LoRA on readout B with the stage-1 MLP frozen.
+"""Stage 2: continue the released LoRA on readout B, training the stage-1 adapter jointly.
+
+The adapter starts from stage 1 in every arm and trains with its own learning rate (with it frozen
+the reader stayed near chance on validation: 0.567 against 0.624 jointly).
 
 Two arms see the same samples in the same order with the same condition per sample (signal or
 text, 50/50): `none` never sees earlier ECGs; `ctx` sees k of the patient's own earlier ECGs with
@@ -18,7 +21,7 @@ from tslm_context import reader
 from tslm_context.samples import Queries
 from tslm_context.waves import DATA
 
-EPOCHS, BATCH, LR, WD = 2, 16, 1e-4, 0.01
+EPOCHS, BATCH, LR, AD_LR, WD = 2, 16, 1e-4, 1e-3, 0.01
 
 
 def main(arm: str, seed: int) -> None:
@@ -37,10 +40,8 @@ def main(arm: str, seed: int) -> None:
     torch.manual_seed(seed)
     table = torch.as_tensor(np.load(DATA / "emb.npy"), device="cuda")
     model = reader.load()
-    adapter = reader.Adapter().cuda().eval()
+    adapter = reader.Adapter().cuda()
     adapter.load_state_dict(torch.load(f"runs/stage1_s{seed}.pt"))
-    adapter.requires_grad_(False)
-    frozen = [p.detach().clone() for p in adapter.parameters()]
     # reader.load freezes everything; OpenTSLM saves only LoRA tensors that require grad.
     params = [p for n, p in model.llm.named_parameters() if "lora_" in n]
     for p in params:
@@ -49,7 +50,10 @@ def main(arm: str, seed: int) -> None:
     # batch of 16 needs more than 16 GB.
     model.llm.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     model.llm.train()
-    opt = torch.optim.AdamW(params, lr=LR, weight_decay=WD)
+    opt = torch.optim.AdamW(
+        [{"params": params, "lr": LR}, {"params": adapter.parameters(), "lr": AD_LR}],
+        weight_decay=WD,
+    )
     steps = len(order) // BATCH
     warm = max(1, int(0.03 * steps))
     sched = torch.optim.lr_scheduler.LambdaLR(
@@ -65,7 +69,7 @@ def main(arm: str, seed: int) -> None:
         ]
         loss = reader.loss(model, adapter, table, batch)
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(params, 1.0)
+        torch.nn.utils.clip_grad_norm_(params + list(adapter.parameters()), 1.0)
         opt.step()
         sched.step()
         opt.zero_grad(set_to_none=True)
@@ -82,8 +86,8 @@ def main(arm: str, seed: int) -> None:
             log.write(json.dumps(rec) + "\n")
             log.flush()
             run = []
-    assert all(torch.equal(a, b) for a, b in zip(frozen, adapter.parameters(), strict=True))
     model.store_to_file(str(out / "model.pt"))
+    torch.save(adapter.state_dict(), out / "adapter.pt")
     print("saved", out / "model.pt")
 
 

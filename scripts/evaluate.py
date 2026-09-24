@@ -62,10 +62,10 @@ def main(seed: int, role: str) -> None:
     out.mkdir(parents=True, exist_ok=True)
     (out / "swap.json").write_text(json.dumps(partner.tolist()))
     table = torch.as_tensor(np.load(DATA / "emb.npy"), device="cuda")
-    adapter = reader.Adapter().cuda().eval()
-    adapter.load_state_dict(torch.load(f"runs/stage1_s{seed}.pt"))
     for arm in ("none", "ctx"):
         model = reader.load(checkpoint=f"runs/train/{arm}_s{seed}/model.pt")
+        adapter = reader.Adapter().cuda().eval()
+        adapter.load_state_dict(torch.load(f"runs/train/{arm}_s{seed}/adapter.pt"))
         for name, (a, world, k, control) in ARMS.items():
             if a != arm:
                 continue
