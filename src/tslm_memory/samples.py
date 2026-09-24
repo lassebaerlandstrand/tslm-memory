@@ -1,11 +1,10 @@
 """Readout-B samples: will the machine read of this patient's next ECG report finding F?
 
 A sample is a list of segments, text or a record (a row of the ECGFounder embedding table that the
-reader turns into 16 tokens). Two conditions:
-- signal: every recording enters only as its 16 tokens; no machine read anywhere;
-- text: every recording also carries its machine read (canonical labels and measures).
-Own history is the query subject's earlier ECGs, most recent first. The swap control keeps the
-query's own offsets and count and takes the recordings from a partner in the same stratum.
+reader turns into 16 tokens). Every recording enters only as its tokens; no machine read appears
+in a prompt. Own history is the query subject's earlier ECGs, most recent first. The swap control
+keeps the query's own offsets and count and takes the recordings from a partner in the same
+stratum; the dates-only control keeps the offsets and drops the recordings.
 """
 
 import numpy as np
@@ -124,29 +123,12 @@ class Queries:
         strata = np.array([self.stratum(i) for i in range(len(self))])
         return swap_partners(strata, self.q.earlier.map(len).to_numpy(), seed)
 
-    def _record(self, study: int, world: str) -> list:
-        seg = [("ecg", int(self.row[study]))]
-        if world == "text":
-            seg.append(("text", machine_read(self.ecgs.loc[study])))
-        return seg
-
-    def sample(
-        self,
-        i: int,
-        world: str,
-        k: int,
-        partner: int | None = None,
-        oracle: bool = False,
-        query_from: int | None = None,
-        dates_only: bool = False,
-    ) -> dict:
-        """k earlier ECGs (own, or from `partner` with the query's own offsets); `oracle` adds the
-        next ECG's machine read; `query_from` replaces the query recording (gate P2); `dates_only`
+    def sample(self, i: int, k: int, partner: int | None = None, dates_only: bool = False) -> dict:
+        """k earlier ECGs (own, or from `partner` with the query's own offsets); `dates_only`
         keeps each earlier ECG's line with its offset but drops the recording."""
         r = self.q.iloc[i]
-        cur = r.cur_study if query_from is None else self.q.cur_study[query_from]
         seg = [("text", "You are an expert cardiologist reading ECGs of one patient.\n\nThis ECG:")]
-        seg += self._record(int(cur), world)
+        seg.append(("ecg", int(self.row[int(r.cur_study)])))
         k = min(k, len(r.earlier))
         if k:
             src = self.q.iloc[partner] if partner is not None else r
@@ -155,15 +137,7 @@ class Queries:
             for j in range(k):
                 seg.append(("text", f"\n- {when(r.days[j])} before this one:"))
                 if not dates_only:
-                    seg += self._record(int(src.earlier[j]), world)
-        if oracle:
-            nxt = self.ecgs.loc[int(r.next_study)]
-            seg.append(
-                (
-                    "text",
-                    f"\n\nNext ECG of this patient, {when(r.gap_days)} later:{machine_read(nxt)}",
-                )
-            )
+                    seg.append(("ecg", int(self.row[int(src.earlier[j])])))
         seg.append(
             (
                 "text",

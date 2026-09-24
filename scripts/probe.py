@@ -1,13 +1,13 @@
 """The frozen reader read by a linear probe (gates_confirm.json).
 
-Exploration after the gates (notes) found that stage 2 removes what the frozen reader holds. Here
-the reader is the released OpenTSLM LoRA with the stage-1 adapter of one seed and no stage 2. Its
-hidden state after layer 12 at "Answer:" is read by one standardised logistic regression per
-finding, C by 5-fold cross-validation on the 8,000 training queries (AUROC within current state).
-The S-none and S-own probes are fitted on their own arm; S-swap (a same-stratum partner's earlier
-ECGs, as in evaluate.py) is scored with the S-own probe. S-dates, added after the confirmation
-was scored, keeps each earlier ECG's line with its offset and drops the recording, with its own
-probe. Writes runs/eval/{test,confirm}/probe-{arm}_s{seed}.jsonl like evaluate.py.
+The reader is the released OpenTSLM LoRA with the stage-1 adapter of one seed and nothing trained
+on top (a reader fine-tuned on the question kept less of the memory gain; that code is at the tag
+full-pipeline). Its hidden state after layer 12 at "Answer:" is read by one standardised logistic
+regression per finding, C by 5-fold cross-validation on the 8,000 training queries (AUROC within
+current state). The S-none and S-own probes are fitted on their own arm; S-swap (a same-stratum
+partner's earlier ECGs at the query's own dates) is scored with the S-own probe. S-dates, added
+after the confirmation was scored, keeps each earlier ECG's line with its offset and drops the
+recording, with its own probe. Writes runs/eval/{test,confirm}/probe-{arm}_s{seed}.jsonl.
 Usage: probe.py seed [arm ...] (all arms by default)
 """
 
@@ -18,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from evaluate import committed
+from confirm_results import committed
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
@@ -48,11 +48,7 @@ def hidden(
         ids = range(s, min(s + 32, len(q)))
         batch = [
             q.sample(
-                i,
-                "signal",
-                k,
-                partner=None if partner is None else int(partner[i]),
-                dates_only=dates_only,
+                i, k, partner=None if partner is None else int(partner[i]), dates_only=dates_only
             )
             for i in ids
         ]

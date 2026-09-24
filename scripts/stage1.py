@@ -2,7 +2,7 @@
 and its LoRA frozen, by generating the record's own machine read from the tokens.
 
 Trains on records of training subjects (buckets 2-9); checks on records of validation subjects
-(bucket 1) with greedy decoding. Pass criteria (gate P1), written to runs/stage1_s{seed}.json:
+(bucket 1) with greedy decoding. Pass criteria, written to runs/stage1_s{seed}.json:
 - per finding, balanced accuracy of the decoded labels >= that of a logistic probe on the same
   frozen embedding, read at its natural threshold as greedy decoding is, minus 0.05;
 - heart rate decoded from the tokens has R^2 >= 0.8;
@@ -11,10 +11,11 @@ Trains on records of training subjects (buckets 2-9); checks on records of valid
   0.05 per finding.
 The first version compared with a class-balanced probe and allowed a flat 0.05 gap. Seed 0 failed
 it on prolonged QT and ischemia while matching the unweighted probe, whose own gap is as large;
-the criteria were amended before any stage-2 run (gates.json keeps both). The first recipe (5
-epochs, no dropout, weight decay 0.01) then still failed the gap criterion on ischemia (0.103
-against 0.101) and was replaced by this one before any stage-2 run. A saved adapter is evaluated
-without retraining. Usage: stage1.py seed
+the criteria were amended before any reader was scored with the adapter (gates.json at the tag
+full-pipeline keeps both). The first recipe (5 epochs, no dropout, weight decay 0.01) then still
+failed the gap criterion on ischemia (0.103 against 0.101) and was replaced by this one, also
+before any reader was scored. A saved adapter is evaluated without retraining.
+Usage: stage1.py seed
 """
 
 import json

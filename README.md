@@ -2,15 +2,14 @@
 
 Memory for time-series language models (TSLMs). A TSLM answers questions about one recording at a
 time. Here it also reads the same person's earlier recordings, each compressed into a few tokens
-the same way as the current one, and its answers about the future are graded against the person's
-next recording.
+the same way as the current one.
 
-The proof of concept uses ECG. On MIMIC-IV-ECG, a frozen OpenTSLM model (Llama-3.2-1B with the
-released ECG LoRA) reads each ECG as 16 tokens: a frozen ECGFounder embedding, a small trained
-adapter and OpenTSLM's projector. A logistic regression on the model's state predicts whether the
-machine read of the patient's next ECG reports atrial fibrillation or flutter, sinus tachycardia,
-prolonged QT, or ST-T changes suggesting ischemia. On 3,200 patients scored after the comparison
-was committed (`gates_confirm.json`), AUROC within finding and current state:
+The proof of concept uses ECG. On MIMIC-IV-ECG, OpenTSLM-SoftPrompt on Llama-3.2-1B (its released
+ECG checkpoint, kept frozen) reads each ECG as 16 tokens: a frozen ECGFounder embedding, a small
+trained adapter and OpenTSLM's projector. A logistic regression on the model's state predicts
+whether the machine read of the patient's next ECG reports atrial fibrillation or flutter, sinus
+tachycardia, prolonged QT, or ST-T changes suggesting ischemia. On 3,200 patients scored after the
+comparison was committed (`gates_confirm.json`), AUROC within finding and current state:
 
 | Input | AUROC |
 |---|---|
@@ -19,9 +18,10 @@ was committed (`gates_confirm.json`), AUROC within finding and current state:
 | + the earlier ECGs themselves | 0.755 |
 | + another patient's earlier ECGs at the same dates | 0.647 |
 
-The dates-only arm was added after the confirmation was scored. Earlier steps of the project
-(a fine-tuned reader, and retrieval of similar patients' recordings with what followed them) are
-still in the code and gated by `gates.json` and `gates_retrieval.json`.
+The dates-only arm was added after the confirmation was scored. Earlier versions of the project
+fine-tuned the reader and retrieved similar patients' recordings with what followed them. Neither
+beat the frozen reader with the patient's own history, and their code is kept at the git tag
+`full-pipeline`.
 
 ## Setup
 
@@ -34,9 +34,13 @@ uv run pytest
 uv run ruff format . && uv run ruff check .
 ```
 
-`scripts/run_all.sh` runs the pipeline from selection to results. `scripts/probe.py` scores the
-frozen reader, `scripts/confirm_results.py` the confirmation set, and `scripts/make_results.py`
-and `scripts/make_figures.py` write the proposal's numbers and figure.
+## Pipeline
+
+`scripts/select_queries.py` chooses the queries and `scripts/fetch.py` downloads their records.
+`scripts/run_all.sh` runs the rest: `embed.py` (ECGFounder embeddings), `encoder_check.py` (why
+OpenTSLM's own ECG encoder is not used), `stage1.py` (the adapter, three seeds), `probe.py` (the
+frozen reader read by a linear probe), `confirm_results.py`, and `make_results.py` and
+`make_figures.py`, which write the proposal's numbers and figure.
 
 ## Data
 

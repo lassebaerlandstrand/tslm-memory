@@ -29,11 +29,8 @@ def test_a_query_alone_with_its_history_count_borrows_a_richer_partner():
 @pytest.fixture(scope="module")
 def queries(ecgs):
     q = select(ecgs, PER_CELL, reserve=0.0)
-    by_study = ecgs.set_index("study_id").copy()
-    # The next ECG carries a sentinel label and has no embedding row, as it is never fetched.
-    by_study["labels"] = by_study.labels.astype(object)
-    for s in q.next_study:
-        by_study.at[s, "labels"] = ["SENTINEL"]
+    by_study = ecgs.set_index("study_id")
+    # The next ECG has no embedding row, as it is never fetched.
     fetched = set(q.cur_study) | {s for j in range(3) for s in q[f"hist_study_{j}"] if s >= 0}
     row = pd.Series(np.arange(len(by_study)), index=by_study.index)
     row[~row.index.isin(list(fetched))] = -1
@@ -44,36 +41,35 @@ def text_of(sample: dict) -> str:
     return "".join(x for kind, x in sample["segments"] if kind == "text")
 
 
-def test_arms_never_read_the_next_ecg_except_the_oracle(queries):
+def rows_of(sample: dict) -> list[int]:
+    return [x for kind, x in sample["segments"] if kind == "ecg"]
+
+
+def test_no_arm_reads_the_next_ecg(queries):
     qs, q = queries
     nxt_rows = set(qs.row[q.next_study].tolist())
     partner = qs.swap_partners()
     for i in range(len(qs)):
-        for world in ("signal", "text"):
-            for kwargs in ({}, {"partner": int(partner[i])}, {"query_from": int(partner[i])}):
-                s = qs.sample(i, world, 3, **kwargs)
-                assert "SENTINEL" not in text_of(s)
-                rows = [x for kind, x in s["segments"] if kind == "ecg"]
-                assert -1 not in rows and not nxt_rows & set(rows)
-        assert "SENTINEL" in text_of(qs.sample(i, "text", 3, oracle=True))
+        for kwargs in ({}, {"partner": int(partner[i])}, {"dates_only": True}):
+            rows = rows_of(qs.sample(i, 3, **kwargs))
+            assert -1 not in rows and not nxt_rows & set(rows)
 
 
-def test_signal_world_has_no_machine_read_and_swap_keeps_offsets(queries):
+def test_swap_keeps_the_offsets_and_replaces_the_earlier_recordings(queries):
     qs, _ = queries
     partner = qs.swap_partners()
     for i in range(len(qs)):
-        own, swapped = qs.sample(i, "signal", 3), qs.sample(i, "signal", 3, partner=int(partner[i]))
+        own, swapped = qs.sample(i, 3), qs.sample(i, 3, partner=int(partner[i]))
         assert "Machine read" not in text_of(own)
         assert text_of(own) == text_of(swapped)  # same offsets, count and question
-        rows = lambda s: [x for kind, x in s["segments"] if kind == "ecg"]  # noqa: E731
-        assert rows(own)[0] == rows(swapped)[0]  # the query recording stays
-        assert set(rows(own)[1:]).isdisjoint(rows(swapped)[1:])
+        assert rows_of(own)[0] == rows_of(swapped)[0]  # the query recording stays
+        assert set(rows_of(own)[1:]).isdisjoint(rows_of(swapped)[1:])
 
 
-def test_none_and_k0_differ_from_own_only_in_the_history(queries):
+def test_without_history_only_the_history_block_is_missing(queries):
     qs, _ = queries
     for i in range(len(qs)):
-        k0, own = text_of(qs.sample(i, "text", 0)), text_of(qs.sample(i, "text", 3))
+        k0, own = text_of(qs.sample(i, 0)), text_of(qs.sample(i, 3))
         assert "Earlier ECGs" not in k0 and "Earlier ECGs" in own
         assert own.endswith(k0[k0.index("\n\nQuestion:") :])
 
@@ -81,7 +77,6 @@ def test_none_and_k0_differ_from_own_only_in_the_history(queries):
 def test_dates_only_keeps_the_offsets_and_drops_the_earlier_recordings(queries):
     qs, _ = queries
     for i in range(len(qs)):
-        own, dates = qs.sample(i, "signal", 3), qs.sample(i, "signal", 3, dates_only=True)
-        rows = [x for kind, x in dates["segments"] if kind == "ecg"]
-        assert rows == [x for kind, x in own["segments"] if kind == "ecg"][:1]  # the query only
+        own, dates = qs.sample(i, 3), qs.sample(i, 3, dates_only=True)
+        assert rows_of(dates) == rows_of(own)[:1]  # the query only
         assert text_of(dates) == text_of(own)  # same offsets, count and question
