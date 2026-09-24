@@ -83,6 +83,8 @@ MEMORY = {
     ],
 }
 COLOURS = [GRAY, GRAY, BLUE, ORANGE, GREEN, GREEN]
+# The retrieval results are reported in the text; set True for a second row with them.
+RETRIEVAL_PANEL = False
 RETRIEVAL = [
     ("Reader, own history", "S-ret-own", BLUE),
     ("+ 4 similar patients with their next ECG", "S-ret-both", BLUE),
@@ -106,26 +108,45 @@ def dots(ax, r: dict, arms: list[str], colours: list[str]) -> None:
 def main() -> None:
     style()
     r = json.loads(Path("runs/results.json").read_text())
-    ret = "auroc S-ret-both" in r
+    ret = "auroc S-ret-both" in r and RETRIEVAL_PANEL
+    curve = "curve k0" in r
     fig = plt.figure(figsize=(7.0, 3.3 if ret else 1.9))
-    grid = fig.add_gridspec(2 if ret else 1, 2, height_ratios=[1, 1] if ret else [1], hspace=0.7)
+    grid = fig.add_gridspec(
+        2 if ret else 1,
+        3 if curve else 2,
+        width_ratios=[1, 1, 0.75] if curve else [1, 1],
+        height_ratios=[1, 1] if ret else [1],
+        hspace=0.7,
+        wspace=0.12,
+    )
     axes = [fig.add_subplot(grid[0, 0]), fig.add_subplot(grid[0, 1])]
     for ax, (title, arms) in zip(axes, MEMORY.items(), strict=True):
         dots(ax, r, arms, COLOURS)
         ax.set_yticks(range(len(ROWS)), list(reversed(ROWS)))
         ax.set_title(title, loc="left")
     axes[1].set_yticklabels([])
+    his = [v[1] for k, v in r.items() if k.endswith(" ci") and not k.startswith("curve")]
+    for ax in axes:
+        ax.set_xlim(0.48, max(his) + 0.01)
+        ax.set_xlabel("AUROC (95 % interval)")
+    if curve:
+        ax = fig.add_subplot(grid[0, 2])
+        ks = [0, 1, 2, 3]
+        est = [r[f"curve k{k}"] for k in ks]
+        lo = [e - r[f"curve k{k} ci"][0] for k, e in zip(ks, est, strict=True)]
+        hi = [r[f"curve k{k} ci"][1] - e for k, e in zip(ks, est, strict=True)]
+        ax.errorbar(ks, est, yerr=[lo, hi], fmt="o-", ms=3.5, color=BLUE, capsize=2, lw=1)
+        ax.set_xticks(ks)
+        ax.set_xlabel("Own earlier ECGs given")
+        ax.set_ylabel("AUROC", labelpad=1)
+        ax.set_title("More history, same patients", loc="left")
     if ret:
         ax = fig.add_subplot(grid[1, :])
         dots(ax, r, [a for _, a, _ in RETRIEVAL], [c for _, _, c in RETRIEVAL])
         ax.set_yticks(range(len(RETRIEVAL)), [lab for lab, _, _ in reversed(RETRIEVAL)])
         ax.set_title("Retrieval on top of memory, signal only", loc="left")
-        axes.append(ax)
-    his = [v[1] for k, v in r.items() if k.endswith(" ci")]
-    for ax in axes:
         ax.set_xlim(0.48, max(his) + 0.01)
-    for ax in axes[2:] if ret else axes:
-        ax.set_xlabel("AUROC within finding and current state (95 % interval)")
+        ax.set_xlabel("AUROC (95 % interval)")
     out = PROPOSAL / "fig_context.pdf"
     fig.savefig(out)
     outline(out)

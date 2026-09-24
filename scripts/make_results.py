@@ -93,6 +93,34 @@ def stack(sc: Scores, base: pd.DataFrame) -> dict:
     return sc.contrast("stack:T-history+S-own", "stack:T-history")
 
 
+def history_curve() -> dict:
+    """Exploratory (scripts/history_curve.py): the ctx reader on patients with three earlier
+    ECGs, given 0 to 3 of them, signal only."""
+    arms, base = {}, None
+    for k in range(4):
+        ds = [
+            pd.read_json(f"runs/curve/S-k{k}_s{s}.jsonl", lines=True, dtype={"cell": str})
+            .sort_values("i")
+            .reset_index(drop=True)
+            for s in SEEDS
+        ]
+        base = ds[0] if base is None else base
+        assert all((d.i.to_numpy() == base.i.to_numpy()).all() for d in ds)
+        arms[f"curve k{k}"] = np.stack([d.p_yes.to_numpy() for d in ds], axis=1)
+    base = base.assign(finding=base.stratum.str.split("|").str[0])
+    sc = Scores(arms, base)
+    out = {}
+    for k in range(4):
+        arm = f"curve k{k}"
+        out[arm] = sc.auc(arm)
+        boots = bootstrap(lambda i, a=arm: sc.auc(a, i), sc.cells, n=1000)
+        out[f"{arm} ci"] = ci(out[arm], boots, [sc.auc(arm, seed=j) for j in range(3)])
+    out["n curve"] = len(base)
+    out["curve k3 minus k0"] = sc.contrast("curve k3", "curve k0")
+    out["curve k1 minus k0"] = sc.contrast("curve k1", "curve k0")
+    return out
+
+
 def label_silent(base: pd.DataFrame) -> np.ndarray:
     """Queries whose earlier ECGs never carry the finding asked about."""
     q = Queries("test")
@@ -165,6 +193,8 @@ def main() -> None:
         ("stat:T-history-42k", "stat:T-current-42k"),
     ]:
         res[f"{a} minus {b}"] = sc.contrast(a, b)
+    if Path("runs/curve").exists():
+        res.update(history_curve())
     silent = label_silent(base)
     res["label-silent share"] = float(silent.mean())
     res["label-silent S-own minus S-swap"] = sc.contrast("S-own", "S-swap", silent)
