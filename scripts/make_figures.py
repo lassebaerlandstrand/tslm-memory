@@ -56,33 +56,18 @@ def outline(path: Path) -> None:
         tmp.replace(path)
 
 
+# (label, arm, colour, marker): the fine-tuned reader (circles), the frozen reader read by a
+# linear probe (squares) and trees on the same embeddings, all signal only.
 ROWS = [
-    "Reader never trained with history",
-    "Reader trained with history, none given",
-    "Reader, own 3 earlier ECGs",
-    "Reader, another patient's earlier ECGs",
-    "Gradient-boosted trees, current ECG",
-    "Gradient-boosted trees, with history",
+    ("Fine-tuned reader, no history", "S-none", GRAY, "o"),
+    ("Fine-tuned reader, own history", "S-own", BLUE, "o"),
+    ("Fine-tuned reader, other patient's", "S-swap", ORANGE, "o"),
+    ("Frozen reader + linear, no history", "probe-S-none", GRAY, "s"),
+    ("Frozen reader + linear, own history", "probe-S-own", BLUE, "s"),
+    ("Frozen reader + linear, other patient's", "probe-S-swap", ORANGE, "s"),
+    ("Trees, current ECG", "stat:S-current", GREEN, "^"),
+    ("Trees, with history", "stat:S-history", GREEN, "^"),
 ]
-MEMORY = {
-    "Memory, signal only": [
-        "S-none",
-        "S-k0",
-        "S-own",
-        "S-swap",
-        "stat:S-current",
-        "stat:S-history",
-    ],
-    "Memory, with the machine read": [
-        "T-none",
-        "T-k0",
-        "T-own",
-        "T-swap",
-        "stat:T-current",
-        "stat:T-history",
-    ],
-}
-COLOURS = [GRAY, GRAY, BLUE, ORANGE, GREEN, GREEN]
 # The retrieval results are reported in the text; set True for a second row with them.
 RETRIEVAL_PANEL = False
 RETRIEVAL = [
@@ -95,12 +80,12 @@ RETRIEVAL = [
 ]
 
 
-def dots(ax, r: dict, arms: list[str], colours: list[str]) -> None:
-    for y, (arm, color) in enumerate(zip(reversed(arms), reversed(colours), strict=True)):
-        est = r[f"auroc {arm}"]
-        lo, hi = r[f"auroc {arm} ci"]
+def dots(ax, r: dict, keys: list[str], colours: list[str], markers: list[str]) -> None:
+    rows = list(zip(keys, colours, markers, strict=True))
+    for y, (key, color, marker) in enumerate(reversed(rows)):
+        est, (lo, hi) = r[key], r[f"{key} ci"]
         ax.errorbar(
-            est, y, xerr=[[est - lo], [hi - est]], fmt="o", ms=3.5, color=color, capsize=2, lw=1
+            est, y, xerr=[[est - lo], [hi - est]], fmt=marker, ms=3.5, color=color, capsize=2, lw=1
         )
     ax.axvline(0.5, color=GRAY, lw=0.6, ls=":")
 
@@ -110,24 +95,31 @@ def main() -> None:
     r = json.loads(Path("runs/results.json").read_text())
     ret = "auroc S-ret-both" in r and RETRIEVAL_PANEL
     curve = "curve k0" in r
-    fig = plt.figure(figsize=(7.0, 3.1 if ret else 1.7))
+    fig = plt.figure(figsize=(7.0, 3.2 if ret else 1.8))
     grid = fig.add_gridspec(
         2 if ret else 1,
         3 if curve else 2,
         width_ratios=[1, 1, 0.75] if curve else [1, 1],
         height_ratios=[1, 1] if ret else [1],
         hspace=0.7,
-        wspace=0.12,
+        wspace=0.16,
     )
-    axes = [fig.add_subplot(grid[0, 0]), fig.add_subplot(grid[0, 1])]
-    for ax, (title, arms) in zip(axes, MEMORY.items(), strict=True):
-        dots(ax, r, arms, COLOURS)
-        ax.set_yticks(range(len(ROWS)), list(reversed(ROWS)))
+    panels = {f"Test patients ({r['n test']:,})": "auroc"}
+    if "confirm auroc probe-S-own" in r:
+        panels[f"Fresh patients, confirmation ({r['n confirm']:,})"] = "confirm auroc"
+    axes = [fig.add_subplot(grid[0, j]) for j in range(len(panels))]
+    for ax, (title, prefix) in zip(axes, panels.items(), strict=True):
+        keys = [f"{prefix} {arm}" for _, arm, _, _ in ROWS]
+        dots(ax, r, keys, [c for _, _, c, _ in ROWS], [m for _, _, _, m in ROWS])
+        ax.axhline(1.5, color=GRAY, lw=0.4, alpha=0.5)
+        ax.axhline(4.5, color=GRAY, lw=0.4, alpha=0.5)
+        ax.set_yticks(range(len(ROWS)), [lab for lab, _, _, _ in reversed(ROWS)])
         ax.set_title(title, loc="left")
-    axes[1].set_yticklabels([])
+    for ax in axes[1:]:
+        ax.set_yticklabels([])
     his = [v[1] for k, v in r.items() if k.endswith(" ci") and not k.startswith("curve")]
     for ax in axes:
-        ax.set_xlim(0.48, max(his) + 0.01)
+        ax.set_xlim(0.55, max(his) + 0.01)
         ax.set_xlabel("AUROC (95 % interval)")
     if curve:
         ax = fig.add_subplot(grid[0, 2])
@@ -138,11 +130,11 @@ def main() -> None:
         ax.errorbar(ks, est, yerr=[lo, hi], fmt="o-", ms=3.5, color=BLUE, capsize=2, lw=1)
         ax.set_xticks(ks)
         ax.set_xlabel("Own earlier ECGs given")
-        ax.set_ylabel("AUROC", labelpad=1)
-        ax.set_title("More history, same patients", loc="left")
+        ax.set_title("Fine-tuned, AUROC by history", loc="left")
     if ret:
         ax = fig.add_subplot(grid[1, :])
-        dots(ax, r, [a for _, a, _ in RETRIEVAL], [c for _, _, c in RETRIEVAL])
+        keys = [f"auroc {a}" for _, a, _ in RETRIEVAL]
+        dots(ax, r, keys, [c for _, _, c in RETRIEVAL], ["o"] * len(RETRIEVAL))
         ax.set_yticks(range(len(RETRIEVAL)), [lab for lab, _, _ in reversed(RETRIEVAL)])
         ax.set_title("Retrieval on top of memory, signal only", loc="left")
         ax.set_xlim(0.48, max(his) + 0.01)

@@ -10,12 +10,15 @@ from make_results import Scores, load
 from tslm_context.grade import bootstrap, ci
 
 ARMS = ["probe-S-none", "probe-S-own", "probe-S-swap", "S-none", "S-own", "S-swap"]
+ARMS += ["stat:S-current", "stat:S-history"]
+C1, C2 = "probe-S-own minus probe-S-swap", "probe-S-own minus probe-S-none"
 CONTRASTS = {
-    "C1: probe-S-own minus probe-S-swap": ("probe-S-own", "probe-S-swap"),
-    "C2: probe-S-own minus probe-S-none": ("probe-S-own", "probe-S-none"),
+    C1: ("probe-S-own", "probe-S-swap"),
+    C2: ("probe-S-own", "probe-S-none"),
     "probe-S-own minus S-own": ("probe-S-own", "S-own"),
     "probe-S-none minus S-none": ("probe-S-none", "S-none"),
     "S-own minus S-none": ("S-own", "S-none"),
+    "probe-S-own minus stat:S-history": ("probe-S-own", "stat:S-history"),
 }
 
 
@@ -36,8 +39,7 @@ def scores(role: str) -> dict:
 def main() -> None:
     tau = json.loads(Path("gates_confirm.json").read_text())["tau"]
     res = {role: scores(role) for role in ("confirm", "test")}
-    c1 = res["confirm"]["C1: probe-S-own minus probe-S-swap"]
-    c2 = res["confirm"]["C2: probe-S-own minus probe-S-none"]
+    c1, c2 = res["confirm"][C1], res["confirm"][C2]
     res["C1"] = bool(c1["lo"] > 0 and min(c1["per_seed"]) > 0)
     big_l = c1["est"] - 2 / 3 * c2["est"]
     res["L"] = big_l

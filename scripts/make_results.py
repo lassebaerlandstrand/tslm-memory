@@ -193,6 +193,15 @@ def main() -> None:
         ("stat:T-history-42k", "stat:T-current-42k"),
     ]:
         res[f"{a} minus {b}"] = sc.contrast(a, b)
+    if "probe-S-own" in sc.arms:
+        # The frozen reader read by a linear probe (scripts/probe.py), found after the gates.
+        for a, b in [
+            ("probe-S-own", "probe-S-none"),
+            ("probe-S-own", "probe-S-swap"),
+            ("probe-S-own", "S-own"),
+            ("probe-S-own", "stat:S-history"),
+        ]:
+            res[f"{a} minus {b}"] = sc.contrast(a, b)
     if Path("runs/curve").exists():
         res.update(history_curve())
     silent = label_silent(base)
@@ -219,6 +228,17 @@ def main() -> None:
         ]:
             res[f"{a} minus {b}"] = sc.contrast(a, b)
         res["retrieval gates passed"] = list(itertools.takewhile(lambda g: res[g], ["R1", "R2"]))
+    if Path("runs/results_confirm.json").exists():
+        # The frozen reader on fresh patients (scripts/confirm_results.py, gates_confirm.json).
+        assert committed("gates_confirm.json"), "gates_confirm.json must be committed as is"
+        conf = json.loads(Path("runs/results_confirm.json").read_text())
+        for k, v in conf["confirm"].items():
+            if k.startswith("auroc "):
+                res[f"confirm {k}"], res[f"confirm {k} ci"] = v["est"], [v["lo"], v["hi"]]
+            else:
+                res[f"confirm {k}"] = v
+        res["C1"], res["C2"] = conf["C1"], conf["C2"]
+        res["n confirm"] = len(Queries("confirm"))
     # Gates are read in order: a later gate counts only if every earlier one passed.
     res["gates passed"] = list(itertools.takewhile(lambda g: res[g], gates["order"]))
     res["tau"] = gates["tau"]

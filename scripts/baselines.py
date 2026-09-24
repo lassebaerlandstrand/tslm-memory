@@ -109,7 +109,7 @@ def main() -> None:
     ceiling = pool_pairs(ecgs.reset_index())
     x_ceiling = {n: matrix(feat, n, ceiling) for n in ("T-current-42k", "T-history-42k")}
     print(f"matched training queries {len(tr)}, ceiling training pairs {len(ceiling)}")
-    for role in ("val", "test"):
+    for role in ("val", "test", "confirm"):
         ev = Queries(role)
         out = Path("runs/baselines") / role
         out.mkdir(parents=True, exist_ok=True)
