@@ -1,9 +1,10 @@
 """Figure for the proposal: ../proposal/fig_memory.pdf, from runs/results.json.
 
-The frozen reader on the fresh confirmation patients, without history, with another patient's
-earlier ECGs and with the patient's own. Style follows the Agentic-AutoRAG paper's _figstyle.py
-(Type-42 fonts outlined with Ghostscript) with the Okabe-Ito colours of the TikZ figure, in TeX
-Gyre Termes to match the ACL template's Times. A sidecar records the inputs, git commit and date.
+The frozen reader on the fresh confirmation patients: without history, with only the dates of the
+patient's earlier ECGs, with the earlier ECGs themselves, and with another patient's. Style
+follows the Agentic-AutoRAG paper's _figstyle.py (Type-42 fonts outlined with Ghostscript) with
+the Okabe-Ito colours of the TikZ figure, in TeX Gyre Termes to match the ACL template's Times. A
+sidecar records the inputs, git commit and date.
 """
 
 import datetime
@@ -20,11 +21,12 @@ import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib import font_manager as fm  # noqa: E402
 
 PROPOSAL = Path(__file__).resolve().parents[2] / "proposal"
-BLUE, ORANGE, GRAY = "#0072B2", "#E69F00", "#999999"
+BLUE, SKY, ORANGE, GRAY = "#0072B2", "#56B4E9", "#E69F00", "#999999"
 BARS = [
     ("No history", "probe-S-none", GRAY),
+    ("Only the dates of\nown earlier ECGs", "probe-S-dates", SKY),
     ("Own earlier ECGs", "probe-S-own", BLUE),
-    ("Another patient's\nearlier ECGs", "probe-S-swap", ORANGE),
+    ("Another patient\u2019s\nearlier ECGs", "probe-S-swap", ORANGE),
 ]
 
 
@@ -63,7 +65,7 @@ def outline(path: Path) -> None:
 def main() -> None:
     style()
     r = json.loads(Path("runs/results.json").read_text())
-    fig, ax = plt.subplots(figsize=(3.0, 1.45))
+    fig, ax = plt.subplots(figsize=(3.0, 1.8))
     for y, (_, arm, colour) in enumerate(reversed(BARS)):
         est, (lo, hi) = r[f"confirm auroc {arm}"], r[f"confirm auroc {arm} ci"]
         # Bars start at 0.5, where AUROC is chance.
