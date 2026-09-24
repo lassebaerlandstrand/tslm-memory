@@ -18,11 +18,6 @@ comparison was committed (`gates_confirm.json`), AUROC within finding and curren
 | + the earlier ECGs themselves | 0.755 |
 | + another patient's earlier ECGs at the same dates | 0.647 |
 
-The dates-only arm was added after the confirmation was scored. Earlier versions of the project
-fine-tuned the reader and retrieved similar patients' recordings with what followed them. Neither
-beat the frozen reader with the patient's own history, and their code is kept at the git tag
-`full-pipeline`.
-
 ## Setup
 
 Requires [uv](https://docs.astral.sh/uv/); it installs Python 3.14 and all dependencies. The base
