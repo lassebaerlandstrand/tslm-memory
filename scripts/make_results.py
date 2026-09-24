@@ -215,6 +215,12 @@ def main() -> None:
                 lines.append(
                     f"\\newcommand{{\\{macro(k + ' ' + part)}}}{{{fmt(v[part], sign=True)}}}"
                 )
+            if v["per_seed"]:
+                low = fmt(min(v["per_seed"]), sign=True)
+                lines.append(f"\\newcommand{{\\{macro(k + ' min seed')}}}{{{low}}}")
+    for k in ("label-silent share", "reader gain as share of statistician gain"):
+        if k in res:
+            lines.append(f"\\newcommand{{\\{macro(k + ' pct')}}}{{{round(100 * res[k])}}}")
     OUT.write_text("\n".join(lines) + "\n")
     for k, v in res.items():
         print(

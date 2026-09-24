@@ -124,7 +124,8 @@ def main() -> None:
     his = [v[1] for k, v in r.items() if k.endswith(" ci")]
     for ax in axes:
         ax.set_xlim(0.48, max(his) + 0.01)
-    axes[-1].set_xlabel("AUROC within finding and current state (95 % interval)")
+    for ax in axes[2:] if ret else axes:
+        ax.set_xlabel("AUROC within finding and current state (95 % interval)")
     out = PROPOSAL / "fig_context.pdf"
     fig.savefig(out)
     outline(out)
