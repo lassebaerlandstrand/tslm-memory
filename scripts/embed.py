@@ -1,7 +1,9 @@
 """ECGFounder embeddings for every fetched record (query and own history of every query).
 
 Writes data/emb.npy [N, 1024] float32 and data/emb.parquet (study_id, row, unusable). Unusable
-records (a lead missing throughout, or every lead flat) get no embedding row. Prints counts only.
+records (a lead missing throughout, or every lead flat) get no embedding row. Records embedded by
+an earlier run keep their rows and new ones are appended (the confirmation role came later).
+Prints counts only.
 """
 
 from concurrent.futures import ThreadPoolExecutor
@@ -18,6 +20,10 @@ def main() -> None:
     cols = ["cur_study"] + [f"hist_study_{j}" for j in range(3)]
     studies = np.unique(q[cols].to_numpy().ravel())
     studies = studies[studies >= 0]
+    old = pd.read_parquet(DATA / "emb.parquet") if (DATA / "emb.parquet").exists() else None
+    old_emb = np.load(DATA / "emb.npy") if old is not None else np.zeros((0, 1024), np.float32)
+    if old is not None:
+        studies = studies[~np.isin(studies, old.study_id.to_numpy())]
     ecgs = pd.read_parquet(DATA / "ecgs.parquet", columns=["study_id", "path"])
     path = dict(zip(ecgs.study_id, ecgs.path, strict=True))
     model = encode.ecgfounder()
@@ -32,17 +38,17 @@ def main() -> None:
             if keep:
                 emb.append(encode.embed(model, np.stack(keep)))
             bad += flags
-    emb = np.concatenate(emb)
-    bad = np.array(bad)
+    emb = np.concatenate(emb) if emb else np.zeros((0, 1024), np.float32)
+    bad = np.array(bad, dtype=bool)
     rows = np.full(len(studies), -1)
-    rows[~bad] = np.arange(len(emb))
-    pd.DataFrame({"study_id": studies, "row": rows, "unusable": bad}).to_parquet(
-        DATA / "emb.parquet"
-    )
-    np.save(DATA / "emb.npy", emb)
+    rows[~bad] = len(old_emb) + np.arange(len(emb))
+    table = pd.DataFrame({"study_id": studies, "row": rows, "unusable": bad})
+    pd.concat([old, table], ignore_index=True).to_parquet(DATA / "emb.parquet")
+    np.save(DATA / "emb.npy", np.concatenate([old_emb, emb]))
     print(
-        f"records {len(studies)}, unusable {int(bad.sum())}, with short dropouts set to 0 {n_nan}, "
-        f"embeddings {emb.shape}"
+        f"new records {len(studies)}, unusable {int(bad.sum())}, "
+        f"with short dropouts set to 0 {n_nan}, new embeddings {emb.shape}, "
+        f"total {len(old_emb) + len(emb)}"
     )
 
 

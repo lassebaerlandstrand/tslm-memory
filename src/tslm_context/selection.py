@@ -5,6 +5,8 @@ least 1 h before the previous) and a next ECG (1 h to 365 d later). For each fin
 on this ECG, F on the next), queries are drawn per role: test from bucket 0, validation from
 bucket 1, training from buckets 2-9, plus a reserve per cell for records that turn out flat or
 missing. Cells are filled rarest first and every subject is used once across all cells and roles.
+The confirmation role (bucket 1 subjects no other role uses) is drawn by a second call with
+`exclude` set to the subjects already used.
 Pairs where F is mentioned only with a qualifier on the current or the next ECG stay out of F's
 cells. Within a cell, subjects are drawn uniformly, then one of their eligible pairs.
 """
@@ -18,10 +20,16 @@ from tslm_context.mimic import FINDINGS, bucket, earlier, next_pairs
 
 N_HIST = 3
 BUCKETS = {"test": {0}, "val": {1}, "train": set(range(2, 10))}
+CONFIRM = {"confirm": {1}}
 
 
 def select(
-    ecgs: pd.DataFrame, per_cell: dict[str, int], reserve: float = 0.05, seed: int = 0
+    ecgs: pd.DataFrame,
+    per_cell: dict[str, int],
+    reserve: float = 0.05,
+    seed: int = 0,
+    buckets: dict[str, set[int]] = BUCKETS,
+    exclude: frozenset[int] = frozenset(),
 ) -> pd.DataFrame:
     rng = np.random.default_rng(seed)
     pairs = next_pairs(ecgs)
@@ -39,13 +47,13 @@ def select(
         vague = np.array([f in x for x in possible[cur]]) | np.array(
             [f in x for x in possible[nxt]]
         )
-        for role, bk in BUCKETS.items():
+        for role, bk in buckets.items():
             in_role = pairs.bucket.isin(bk).to_numpy() & ~vague
             for a in (False, True):
                 for b in (False, True):
                     cells.append((role, f, f"{int(a)}{int(b)}", in_role & (now == a) & (then == b)))
 
-    used: set[int] = set()
+    used = set(exclude)
     rows = []
     for role, f, cell, m in sorted(cells, key=lambda c: pairs.subject_id[c[3]].nunique()):
         n = math.ceil(per_cell[role] * (1 + reserve))
@@ -80,7 +88,7 @@ def to_fetch(q: pd.DataFrame) -> np.ndarray:
     """Study ids whose waveforms are needed (query and history), test first. Next ECGs are never
     fetched."""
     out = []
-    for role in ("test", "val", "train"):
+    for role in ("test", "val", "train", "confirm"):
         r = q[q.role == role]
         s = np.concatenate([r.cur_study] + [r[f"hist_study_{j}"] for j in range(N_HIST)])
         out.append(s[s >= 0])

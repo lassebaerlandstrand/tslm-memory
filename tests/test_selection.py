@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from tslm_context.mimic import bucket
-from tslm_context.selection import BUCKETS, N_HIST, select, to_fetch
+from tslm_context.selection import BUCKETS, CONFIRM, N_HIST, select, to_fetch
 
 PER_CELL = {"test": 2, "val": 1, "train": 3}
 
@@ -59,3 +59,12 @@ def test_next_ecgs_are_never_fetched(queries):
     test_subjects = set(queries[queries.role == "test"].subject_id)
     assert np.isin(fetched[: 2 * 16 * PER_CELL["test"]], fetched).all()
     assert test_subjects.isdisjoint(set(queries[queries.role != "test"].subject_id))
+
+
+def test_confirmation_role_is_fresh_bucket_1(ecgs, queries):
+    used = frozenset(queries.subject_id)
+    c = select(ecgs, {"confirm": 2}, reserve=0.0, buckets=CONFIRM, exclude=used)
+    assert c.subject_id.is_unique and used.isdisjoint(c.subject_id)
+    assert all(bucket(s) == 1 for s in c.subject_id)
+    assert (c.groupby(["finding", "cell"]).size() == 2).all()
+    assert c.groupby(["finding", "cell"]).ngroups == 16

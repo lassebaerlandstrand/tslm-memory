@@ -7,11 +7,13 @@ Arms (adapter, condition, earlier ECGs, control):
 - S-own, T-own: the `ctx` adapter with up to 3 own earlier ECGs;
 - S-swap, T-swap: the same with a same-stratum partner's earlier ECGs at the query's own offsets;
 - T-oracle: T-own plus the next ECG's machine read (a diagnostic, not a gate).
+On the confirmation role (gates_confirm.json) only S-none, S-own and S-swap, as a reference for the
+frozen reader of scripts/probe.py.
 With `ret`, the retrieval arms (gates_retrieval.json) of the `ret` adapter instead:
 - S-ret-k0, S-ret-own (3 own), S-ret-nb (4 neighbours), S-ret-both (3 own + 4 neighbours),
   S-ret-shuf (both, with the neighbours' next ECGs swapped within state), and T- versions of own,
   both and shuf.
-Usage: evaluate.py seed {val,test} [ret]
+Usage: evaluate.py seed {val,test,confirm} [ret]
 """
 
 import json
@@ -41,6 +43,7 @@ ARMS = {
     "T-swap": ("ctx", "text", 3, "history"),
     "T-oracle": ("ctx", "text", 3, "oracle"),
 }
+CONFIRM_ARMS = ("S-none", "S-own", "S-swap")
 RET_ARMS = {  # name: (condition, own earlier ECGs, neighbours, shuffled next)
     "S-ret-k0": ("signal", 0, 0, False),
     "S-ret-own": ("signal", 3, 0, False),
@@ -70,20 +73,6 @@ def committed(path: str) -> bool:
     return tracked.returncode == 0 and clean.returncode == 0
 
 
-def record(q: Queries, i: int, p: float) -> dict:
-    r = q.q.iloc[i]
-    return {
-        "i": i,
-        "subject": int(r.subject_id),
-        "finding": r.finding,
-        "cell": r.cell,
-        "stratum": q.stratum(i),
-        "y": q.label(i),
-        "n_hist": len(r.earlier),
-        "p_yes": p,
-    }
-
-
 def main_ret(seed: int, role: str) -> None:
     # The retrieval gates are fixed before the test set is scored.
     assert role != "test" or committed("gates_retrieval.json"), "commit gates_retrieval.json"
@@ -106,7 +95,7 @@ def main_ret(seed: int, role: str) -> None:
                 for i in chunk
             ]
             ps = reader.p_yes(model, adapter, table, batch)
-            recs += [record(q, i, p) for i, p in zip(chunk, ps, strict=True)]
+            recs += [q.result(i, p) for i, p in zip(chunk, ps, strict=True)]
         path = out / f"{name}_s{seed}.jsonl"
         path.write_text("".join(json.dumps(r) + "\n" for r in recs))
         print(f"{role} {name} s{seed}: n {len(recs)} {time.time() - t:.0f}s", flush=True)
@@ -115,6 +104,7 @@ def main_ret(seed: int, role: str) -> None:
 def main(seed: int, role: str) -> None:
     # The gates are fixed before the test set is scored: gates.json must be committed as is.
     assert role != "test" or committed("gates.json"), "commit gates.json first"
+    assert role != "confirm" or committed("gates_confirm.json"), "commit gates_confirm.json first"
     q = Queries(role)
     partner = q.swap_partners(seed=0)
     assert (partner >= 0).all() and (partner != np.arange(len(q))).all()
@@ -127,7 +117,7 @@ def main(seed: int, role: str) -> None:
         adapter = reader.Adapter().cuda().eval()
         adapter.load_state_dict(torch.load(f"runs/train/{arm}_s{seed}/adapter.pt"))
         for name, (a, world, k, control) in ARMS.items():
-            if a != arm:
+            if a != arm or (role == "confirm" and name not in CONFIRM_ARMS):
                 continue
             t = time.time()
             recs = []
@@ -135,7 +125,7 @@ def main(seed: int, role: str) -> None:
                 chunk = range(s, min(s + BATCH, len(q)))
                 batch = [sample(q, i, world, k, control, int(partner[i])) for i in chunk]
                 ps = reader.p_yes(model, adapter, table, batch)
-                recs += [record(q, i, p) for i, p in zip(chunk, ps, strict=True)]
+                recs += [q.result(i, p) for i, p in zip(chunk, ps, strict=True)]
             path = out / f"{name}_s{seed}.jsonl"
             path.write_text("".join(json.dumps(r) + "\n" for r in recs))
             print(f"{role} {name} s{seed}: n {len(recs)} {time.time() - t:.0f}s", flush=True)

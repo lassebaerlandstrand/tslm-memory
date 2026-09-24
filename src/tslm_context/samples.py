@@ -15,7 +15,7 @@ from tslm_context.mimic import MEASURES
 from tslm_context.waves import DATA
 
 N_HIST = 3
-PER_CELL = {"test": 200, "val": 25, "train": 500}
+PER_CELL = {"test": 200, "val": 25, "train": 500, "confirm": 200}
 NAMES = {"hr": "rate", "pr": "PR", "qrs": "QRS", "qt": "QT", "qtc": "QTc"}
 UNITS = {"hr": "bpm", "pr": "ms", "qrs": "ms", "qt": "ms", "qtc": "ms"}
 
@@ -105,6 +105,20 @@ class Queries:
 
     def stratum(self, i: int) -> str:
         return f"{self.q.finding[i]}|{self.q.cell[i][0]}"
+
+    def result(self, i: int, p: float) -> dict:
+        """One scored query as written to runs/eval."""
+        r = self.q.iloc[i]
+        return {
+            "i": i,
+            "subject": int(r.subject_id),
+            "finding": r.finding,
+            "cell": r.cell,
+            "stratum": self.stratum(i),
+            "y": self.label(i),
+            "n_hist": len(r.earlier),
+            "p_yes": p,
+        }
 
     def swap_partners(self, seed: int = 0) -> np.ndarray:
         strata = np.array([self.stratum(i) for i in range(len(self))])

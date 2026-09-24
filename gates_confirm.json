@@ -1,0 +1,26 @@
+{
+ "when": "2026-09-24, after the confirmation records were fetched and embedded and before any confirmation query was scored",
+ "why": "exploration after the gates in gates.json (test set already read) found that stage 2 removes information the frozen reader holds: the released OpenTSLM LoRA with a stage-1 adapter and no stage 2, read by a linear probe, gained +0.040 (0.025 to 0.055) from own history on test where the stage-2 reader gained +0.018; since test was reused for that exploration, the claim is confirmed here on subjects never used",
+ "confirmation set": "bucket 1 subjects that no other role uses, drawn with the rules of every other role (scripts/select_queries.py), 200 queries per (finding, cell), 3,200 queries",
+ "reader": "released OpenTSLM LoRA (OpenTSLM/llama-3.2-1b-ecg-sp) with the stage-1 adapter of seeds 0, 1 and 2, no stage 2; hidden state after layer 12 at 'Answer:' (layer 12 was chosen after looking at test; layers 8 and 16 gave per-seed gains of +0.033 to +0.048 there)",
+ "readout": "per finding, standardised logistic regression; C from {1e-4, 3e-4, 1e-3, 3e-3, 1e-2} by 5-fold stratified cross-validation (random_state 0) on the 8,000 training queries' features of the same arm, maximising AUROC within current state; S-swap is scored with the S-own probe; p = predicted probability (scripts/probe.py)",
+ "metric": "mean AUROC within the 8 strata (finding x current state), seed-averaged p",
+ "interval": "95 %, SE_tot^2 = SE_boot^2 + Var(per-seed contrasts)/n_seeds; bootstrap within the 16 cells, B = 2000, seed 0",
+ "order": [
+  "C1",
+  "C2"
+ ],
+ "C1": "probe-S-own minus probe-S-swap: interval above 0 and every per-seed contrast above 0 (as G1)",
+ "C2": "probe-S-own minus probe-S-none >= tau, interval above 0, every per-seed contrast above 0, and L = (S-own - S-swap) - 2/3 (S-own - S-none) >= 0 (as G2)",
+ "tau": 0.02,
+ "reported, not gated": "the stage-2 readers on the same queries (S-none, S-own, S-swap; scripts/evaluate.py seed confirm) and probe minus stage-2 contrasts",
+ "exploratory numbers on test": {
+  "probe S-none": 0.704,
+  "probe S-own": 0.744,
+  "probe S-swap": 0.63,
+  "probe S-own minus S-none": 0.04,
+  "probe S-own minus S-swap": 0.115,
+  "stage-2 S-none": 0.669,
+  "stage-2 S-own": 0.687
+ }
+}
