@@ -23,8 +23,8 @@ PROPOSAL = Path(__file__).resolve().parents[2] / "proposal"
 BLUE, ORANGE, GRAY = "#0072B2", "#E69F00", "#999999"
 BARS = [
     ("No history", "probe-S-none", GRAY),
-    ("Another patient's\nearlier ECGs", "probe-S-swap", ORANGE),
     ("Own earlier ECGs", "probe-S-own", BLUE),
+    ("Another patient's\nearlier ECGs", "probe-S-swap", ORANGE),
 ]
 
 
@@ -36,10 +36,10 @@ def style() -> None:
             "pdf.fonttype": 42,
             "font.family": "serif",
             "font.serif": ["TeX Gyre Termes", "STIX Two Text", "DejaVu Serif"],
-            "font.size": 9,
-            "axes.labelsize": 9,
-            "xtick.labelsize": 8,
-            "ytick.labelsize": 9,
+            "font.size": 9.5,
+            "axes.labelsize": 9.5,
+            "xtick.labelsize": 8.5,
+            "ytick.labelsize": 9.5,
             "axes.spines.top": False,
             "axes.spines.right": False,
             "savefig.bbox": "tight",
@@ -63,13 +63,13 @@ def outline(path: Path) -> None:
 def main() -> None:
     style()
     r = json.loads(Path("runs/results.json").read_text())
-    fig, ax = plt.subplots(figsize=(3.0, 1.35))
+    fig, ax = plt.subplots(figsize=(3.0, 1.45))
     for y, (_, arm, colour) in enumerate(reversed(BARS)):
         est, (lo, hi) = r[f"confirm auroc {arm}"], r[f"confirm auroc {arm} ci"]
         # Bars start at 0.5, where AUROC is chance.
         ax.barh(y, est - 0.5, left=0.5, height=0.62, color=colour)
         ax.errorbar(est, y, xerr=[[est - lo], [hi - est]], color="black", lw=0.8, capsize=2)
-        ax.text(hi + 0.004, y, f"{est:.3f}", va="center", fontsize=8.5)
+        ax.text(hi + 0.004, y, f"{est:.3f}", va="center", fontsize=9)
     ax.set_yticks(range(len(BARS)), [label for label, _, _ in reversed(BARS)])
     ax.tick_params(axis="y", length=0)
     ax.set_xlim(0.5, 0.8)
