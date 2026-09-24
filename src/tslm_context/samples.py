@@ -138,9 +138,11 @@ class Queries:
         partner: int | None = None,
         oracle: bool = False,
         query_from: int | None = None,
+        dates_only: bool = False,
     ) -> dict:
         """k earlier ECGs (own, or from `partner` with the query's own offsets); `oracle` adds the
-        next ECG's machine read; `query_from` replaces the query recording (gate P2)."""
+        next ECG's machine read; `query_from` replaces the query recording (gate P2); `dates_only`
+        keeps each earlier ECG's line with its offset but drops the recording."""
         r = self.q.iloc[i]
         cur = r.cur_study if query_from is None else self.q.cur_study[query_from]
         seg = [("text", "You are an expert cardiologist reading ECGs of one patient.\n\nThis ECG:")]
@@ -152,7 +154,8 @@ class Queries:
             seg.append(("text", "\n\nEarlier ECGs of the same patient:"))
             for j in range(k):
                 seg.append(("text", f"\n- {when(r.days[j])} before this one:"))
-                seg += self._record(int(src.earlier[j]), world)
+                if not dates_only:
+                    seg += self._record(int(src.earlier[j]), world)
         if oracle:
             nxt = self.ecgs.loc[int(r.next_study)]
             seg.append(

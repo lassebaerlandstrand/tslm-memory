@@ -76,3 +76,12 @@ def test_none_and_k0_differ_from_own_only_in_the_history(queries):
         k0, own = text_of(qs.sample(i, "text", 0)), text_of(qs.sample(i, "text", 3))
         assert "Earlier ECGs" not in k0 and "Earlier ECGs" in own
         assert own.endswith(k0[k0.index("\n\nQuestion:") :])
+
+
+def test_dates_only_keeps_the_offsets_and_drops_the_earlier_recordings(queries):
+    qs, _ = queries
+    for i in range(len(qs)):
+        own, dates = qs.sample(i, "signal", 3), qs.sample(i, "signal", 3, dates_only=True)
+        rows = [x for kind, x in dates["segments"] if kind == "ecg"]
+        assert rows == [x for kind, x in own["segments"] if kind == "ecg"][:1]  # the query only
+        assert text_of(dates) == text_of(own)  # same offsets, count and question

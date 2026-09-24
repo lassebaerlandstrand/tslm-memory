@@ -5,8 +5,10 @@ the reader is the released OpenTSLM LoRA with the stage-1 adapter of one seed an
 hidden state after layer 12 at "Answer:" is read by one standardised logistic regression per
 finding, C by 5-fold cross-validation on the 8,000 training queries (AUROC within current state).
 The S-none and S-own probes are fitted on their own arm; S-swap (a same-stratum partner's earlier
-ECGs, as in evaluate.py) is scored with the S-own probe. Writes
-runs/eval/{test,confirm}/probe-{arm}_s{seed}.jsonl like evaluate.py. Usage: probe.py seed
+ECGs, as in evaluate.py) is scored with the S-own probe. S-dates, added after the confirmation
+was scored, keeps each earlier ECG's line with its offset and drops the recording, with its own
+probe. Writes runs/eval/{test,confirm}/probe-{arm}_s{seed}.jsonl like evaluate.py.
+Usage: probe.py seed [arm ...] (all arms by default)
 """
 
 import json
@@ -28,16 +30,30 @@ from tslm_context.waves import DATA
 
 LAYER = 12
 CS = (1e-4, 3e-4, 1e-3, 3e-3, 1e-2)
-ARMS = {"S-none": (0, "S-none"), "S-own": (3, "S-own"), "S-swap": (3, "S-own")}  # k, probe
+# arm: (k, probe, dates only)
+ARMS = {
+    "S-none": (0, "S-none", False),
+    "S-own": (3, "S-own", False),
+    "S-swap": (3, "S-own", False),
+    "S-dates": (3, "S-dates", True),
+}
 
 
 @torch.no_grad()
-def hidden(model, adapter, table, q: Queries, k: int, partner=None) -> np.ndarray:
+def hidden(
+    model, adapter, table, q: Queries, k: int, partner=None, dates_only: bool = False
+) -> np.ndarray:
     out = []
     for s in range(0, len(q), 32):
         ids = range(s, min(s + 32, len(q)))
         batch = [
-            q.sample(i, "signal", k, partner=None if partner is None else int(partner[i]))
+            q.sample(
+                i,
+                "signal",
+                k,
+                partner=None if partner is None else int(partner[i]),
+                dates_only=dates_only,
+            )
             for i in ids
         ]
         emb, att = reader.embed_left(model, adapter, table, batch)
@@ -75,7 +91,7 @@ def fit(x: np.ndarray, q: Queries) -> dict:
     return probes
 
 
-def main(seed: int) -> None:
+def main(seed: int, arms: list[str]) -> None:
     # The confirmation gates are fixed before the confirmation set is scored.
     assert committed("gates_confirm.json"), "commit gates_confirm.json first"
     tr = Queries("train")
@@ -84,17 +100,20 @@ def main(seed: int) -> None:
     adapter = reader.Adapter().cuda().eval()
     adapter.load_state_dict(torch.load(f"runs/stage1_s{seed}.pt"))
     probes = {
-        arm: fit(hidden(model, adapter, table, tr, k), tr)
-        for arm, k in (("S-none", 0), ("S-own", 3))
+        p: fit(hidden(model, adapter, table, tr, ARMS[p][0], dates_only=ARMS[p][2]), tr)
+        for p in sorted({ARMS[a][1] for a in arms})
     }
     for role in ("test", "confirm"):
         ev = Queries(role)
         partner = ev.swap_partners(seed=0)
         out = Path("runs/eval") / role
         out.mkdir(parents=True, exist_ok=True)
-        for arm, (k, probe) in ARMS.items():
+        for arm in arms:
+            k, probe, dates_only = ARMS[arm]
             t = time.time()
-            x = hidden(model, adapter, table, ev, k, partner if arm == "S-swap" else None)
+            x = hidden(
+                model, adapter, table, ev, k, partner if arm == "S-swap" else None, dates_only
+            )
             p = np.zeros(len(ev))
             for f, (sc, lr) in probes[probe].items():
                 m = (ev.q.finding == f).to_numpy()
@@ -107,4 +126,4 @@ def main(seed: int) -> None:
 
 
 if __name__ == "__main__":
-    main(int(sys.argv[1]))
+    main(int(sys.argv[1]), sys.argv[2:] or list(ARMS))
