@@ -110,7 +110,7 @@ def main() -> None:
     r = json.loads(Path("runs/results.json").read_text())
     ret = "auroc S-ret-both" in r and RETRIEVAL_PANEL
     curve = "curve k0" in r
-    fig = plt.figure(figsize=(7.0, 3.3 if ret else 1.9))
+    fig = plt.figure(figsize=(7.0, 3.1 if ret else 1.7))
     grid = fig.add_gridspec(
         2 if ret else 1,
         3 if curve else 2,
