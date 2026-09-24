@@ -12,7 +12,7 @@ from pathlib import Path
 
 from make_results import Scores, load
 
-from tslm_context.grade import bootstrap, ci
+from tslm_memory.grade import bootstrap, ci
 
 ARMS = ["probe-S-none", "probe-S-own", "probe-S-swap", "probe-S-dates", "S-none", "S-own"]
 ARMS += ["S-swap", "stat:S-current", "stat:S-history"]

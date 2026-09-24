@@ -12,8 +12,8 @@ import numpy as np
 import pandas as pd
 import torch
 
-from tslm_context.samples import Queries, machine_read, when
-from tslm_context.waves import DATA
+from tslm_memory.samples import Queries, machine_read, when
+from tslm_memory.waves import DATA
 
 
 class WithNeighbours(Queries):

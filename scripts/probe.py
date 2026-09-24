@@ -23,10 +23,10 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 
-from tslm_context import reader
-from tslm_context.grade import auroc_within
-from tslm_context.samples import Queries
-from tslm_context.waves import DATA
+from tslm_memory import reader
+from tslm_memory.grade import auroc_within
+from tslm_memory.samples import Queries
+from tslm_memory.waves import DATA
 
 LAYER = 12
 CS = (1e-4, 3e-4, 1e-3, 3e-3, 1e-2)

@@ -22,11 +22,11 @@ import pandas as pd
 from sklearn.decomposition import PCA
 from sklearn.ensemble import HistGradientBoostingClassifier
 
-from tslm_context.grade import auroc_within
-from tslm_context.mimic import FINDINGS, LABELS, MEASURES, bucket, earlier, next_pairs
-from tslm_context.retrieval import WithNeighbours
-from tslm_context.samples import N_HIST, Queries
-from tslm_context.waves import DATA
+from tslm_memory.grade import auroc_within
+from tslm_memory.mimic import FINDINGS, LABELS, MEASURES, bucket, earlier, next_pairs
+from tslm_memory.retrieval import WithNeighbours
+from tslm_memory.samples import N_HIST, Queries
+from tslm_memory.waves import DATA
 
 NAMES = ["T-current", "T-history", "T-lookup", "S-current", "S-history"]
 

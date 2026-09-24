@@ -1,7 +1,7 @@
 [project]
-name = "tslm-context"
+name = "tslm-memory"
 version = "0.1.0"
-description = "A time-series language model that reads other recordings: the person's own earlier ones and similar people's with what followed"
+description = "Memory for time-series language models: the model reads the same person's earlier recordings. Proof of concept on ECG."
 readme = "README.md"
 authors = [
     { name = "Lasse Bærland Strand", email = "lstrand.research@gmail.com" }

@@ -6,7 +6,7 @@ the reader stayed near chance on validation: 0.567 against 0.624 jointly).
 Three arms see the same samples in the same order with the same condition per sample (signal or
 text, 50/50): `none` never sees earlier ECGs; `ctx` sees k of the patient's own earlier ECGs with
 k drawn uniformly from 0 to the number available; `ret` sees the same own history as ctx plus 0, 2
-or 4 similar ECGs of other training subjects, each with its next ECG (tslm_context.retrieval).
+or 4 similar ECGs of other training subjects, each with its next ECG (tslm_memory.retrieval).
 Loss: cross-entropy of " yes"/" no" at the answer position. Usage: train.py {none,ctx,ret} seed
 """
 
@@ -18,10 +18,10 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from tslm_context import reader
-from tslm_context.retrieval import WithNeighbours
-from tslm_context.samples import Queries
-from tslm_context.waves import DATA
+from tslm_memory import reader
+from tslm_memory.retrieval import WithNeighbours
+from tslm_memory.samples import Queries
+from tslm_memory.waves import DATA
 
 EPOCHS, BATCH, LR, AD_LR, WD = 2, 16, 1e-4, 1e-3, 0.01
 

@@ -13,9 +13,9 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from tslm_context import reader
-from tslm_context.samples import Queries
-from tslm_context.waves import DATA
+from tslm_memory import reader
+from tslm_memory.samples import Queries
+from tslm_memory.waves import DATA
 
 BATCH = 32
 

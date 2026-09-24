@@ -16,7 +16,7 @@ import math
 import numpy as np
 import pandas as pd
 
-from tslm_context.mimic import FINDINGS, bucket, earlier, next_pairs
+from tslm_memory.mimic import FINDINGS, bucket, earlier, next_pairs
 
 N_HIST = 3
 BUCKETS = {"test": {0}, "val": {1}, "train": set(range(2, 10))}

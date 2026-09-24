@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from tslm_context.grade import auroc_within
+from tslm_memory.grade import auroc_within
 
 
 def auroc(name: str) -> float:

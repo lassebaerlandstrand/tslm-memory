@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import pandas as pd
 
-from tslm_context.waves import DATA, read500, unusable
+from tslm_memory.waves import DATA, read500, unusable
 
 K = 8
 ZIP = DATA / "kaggle" / "mimic-iv-ecg-demo-diagnostic-ecg-matched-subset.zip"
@@ -54,7 +54,7 @@ def extract() -> None:
 def embed() -> None:
     import torch
 
-    from tslm_context import encode
+    from tslm_memory import encode
 
     train = pool_next()
     ecgs = pd.read_parquet(DATA / "ecgs.parquet", columns=["study_id", "path"])

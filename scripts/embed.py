@@ -11,8 +11,8 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import pandas as pd
 
-from tslm_context import encode
-from tslm_context.waves import DATA, read500, unusable
+from tslm_memory import encode
+from tslm_memory.waves import DATA, read500, unusable
 
 
 def main() -> None:

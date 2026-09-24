@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tslm_context.mimic import bucket, earlier, labels_of, next_pairs
+from tslm_memory.mimic import bucket, earlier, labels_of, next_pairs
 
 
 def test_qualifier_applies_to_its_own_clause_only():
