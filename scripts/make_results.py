@@ -113,10 +113,14 @@ def macro(key: str) -> str:
     )
 
 
+def committed(path: str) -> bool:
+    tracked = subprocess.run(["git", "ls-files", "--error-unmatch", path], check=False)
+    clean = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", path], check=False)
+    return tracked.returncode == 0 and clean.returncode == 0
+
+
 def main() -> None:
-    tracked = subprocess.run(["git", "ls-files", "--error-unmatch", "gates.json"], check=False)
-    clean = subprocess.run(["git", "diff", "--quiet", "HEAD", "--", "gates.json"], check=False)
-    assert tracked.returncode == 0 and clean.returncode == 0, "gates.json must be committed as is"
+    assert committed("gates.json"), "gates.json must be committed as is"
     gates = json.loads(Path("gates.json").read_text())
     res = {}
     arms, base = load("val")
@@ -167,6 +171,24 @@ def main() -> None:
     gain = res["stat:S-history minus stat:S-current"]["est"]
     if gain > 0:
         res["reader gain as share of statistician gain"] = g2["est"] / gain
+    if "S-ret-both" in sc.arms:
+        # Retrieval (gates_retrieval.json): an exploratory second step, fixed before it ran.
+        assert committed("gates_retrieval.json"), "gates_retrieval.json must be committed as is"
+        r1 = sc.contrast("S-ret-both", "S-ret-own")
+        r2 = sc.contrast("S-ret-both", "S-ret-shuf")
+        res["S-ret-both minus S-ret-own"], res["S-ret-both minus S-ret-shuf"] = r1, r2
+        res["R1"] = r1["lo"] > 0 and len(r1["per_seed"]) == 3 and all(x > 0 for x in r1["per_seed"])
+        res["R2"] = r2["lo"] > 0 and len(r2["per_seed"]) == 3 and all(x > 0 for x in r2["per_seed"])
+        for a, b in [
+            ("S-ret-nb", "S-ret-k0"),
+            ("S-ret-own", "S-ret-k0"),
+            ("T-ret-both", "T-ret-own"),
+            ("T-ret-both", "T-ret-shuf"),
+            ("stat:S-history+votes", "stat:S-history"),
+            ("stat:T-history+votes", "stat:T-history"),
+        ]:
+            res[f"{a} minus {b}"] = sc.contrast(a, b)
+        res["retrieval gates passed"] = list(itertools.takewhile(lambda g: res[g], ["R1", "R2"]))
     # Gates are read in order: a later gate counts only if every earlier one passed.
     res["gates passed"] = list(itertools.takewhile(lambda g: res[g], gates["order"]))
     res["tau"] = gates["tau"]

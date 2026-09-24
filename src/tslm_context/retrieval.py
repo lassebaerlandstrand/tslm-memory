@@ -25,6 +25,9 @@ class WithNeighbours(Queries):
         q = pd.read_parquet(DATA / "queries.parquet")
         pool = q[q.role == "train"].set_index("cur_study")
         self.pool_next, self.pool_gap = pool.next_study, pool.gap_days
+        nb_subject = pool.subject_id.loc[self.nb.ravel()].to_numpy().reshape(self.nb.shape)
+        assert not (nb_subject == self.q.subject_id.to_numpy()[:, None]).any()
+        assert role == "train" or set(pool.subject_id).isdisjoint(self.q.subject_id)
         nxt = pd.read_parquet(DATA / "emb_next.parquet").set_index("study_id").row
         # Next ECGs live in a second table appended after the query and history embeddings.
         self.offset = int(self.row.max()) + 1

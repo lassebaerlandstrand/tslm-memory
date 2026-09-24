@@ -3,10 +3,11 @@
 The adapter starts from stage 1 in every arm and trains with its own learning rate (with it frozen
 the reader stayed near chance on validation: 0.567 against 0.624 jointly).
 
-Two arms see the same samples in the same order with the same condition per sample (signal or
+Three arms see the same samples in the same order with the same condition per sample (signal or
 text, 50/50): `none` never sees earlier ECGs; `ctx` sees k of the patient's own earlier ECGs with
-k drawn uniformly from 0 to the number available. Loss: cross-entropy of " yes"/" no" at the answer
-position. Usage: train.py {none,ctx} seed
+k drawn uniformly from 0 to the number available; `ret` sees the same own history as ctx plus 0, 2
+or 4 similar ECGs of other training subjects, each with its next ECG (tslm_context.retrieval).
+Loss: cross-entropy of " yes"/" no" at the answer position. Usage: train.py {none,ctx,ret} seed
 """
 
 import json
@@ -18,6 +19,7 @@ import numpy as np
 import torch
 
 from tslm_context import reader
+from tslm_context.retrieval import WithNeighbours
 from tslm_context.samples import Queries
 from tslm_context.waves import DATA
 
@@ -25,20 +27,26 @@ EPOCHS, BATCH, LR, AD_LR, WD = 2, 16, 1e-4, 1e-3, 0.01
 
 
 def main(arm: str, seed: int) -> None:
-    assert arm in ("none", "ctx")
+    assert arm in ("none", "ctx", "ret")
     out = Path("runs/train") / f"{arm}_s{seed}"
     out.mkdir(parents=True, exist_ok=True)
-    q = Queries("train")
+    q = WithNeighbours("train") if arm == "ret" else Queries("train")
     rng = np.random.default_rng(seed)
     order = np.concatenate([rng.permutation(len(q)) for _ in range(EPOCHS)])
     # Drawn for every sample in both arms so the two runs consume identical random streams.
     world = np.where(rng.random(len(order)) < 0.5, "signal", "text")
     frac = rng.random(len(order))
     n_hist = q.q.earlier.map(len).to_numpy()[order]
-    k = np.floor(frac * (n_hist + 1)).astype(int) if arm == "ctx" else np.zeros(len(order), int)
+    k = np.floor(frac * (n_hist + 1)).astype(int) if arm != "none" else np.zeros(len(order), int)
+    # Drawn after the shared streams, so none and ctx are unchanged by the ret arm.
+    k_nb = rng.choice([0, 2, 4], size=len(order)) if arm == "ret" else np.zeros(len(order), int)
 
     torch.manual_seed(seed)
-    table = torch.as_tensor(np.load(DATA / "emb.npy"), device="cuda")
+    table = (
+        WithNeighbours.table()
+        if arm == "ret"
+        else torch.as_tensor(np.load(DATA / "emb.npy"), device="cuda")
+    )
     model = reader.load()
     adapter = reader.Adapter().cuda()
     adapter.load_state_dict(torch.load(f"runs/stage1_s{seed}.pt"))
@@ -64,8 +72,10 @@ def main(arm: str, seed: int) -> None:
     for step in range(steps):
         sl = slice(step * BATCH, (step + 1) * BATCH)
         batch = [
-            q.sample(int(i), str(w), int(kk))
-            for i, w, kk in zip(order[sl], world[sl], k[sl], strict=True)
+            q.sample(int(i), str(w), int(kk), k_nb=int(nb))
+            if nb
+            else q.sample(int(i), str(w), int(kk))
+            for i, w, kk, nb in zip(order[sl], world[sl], k[sl], k_nb[sl], strict=True)
         ]
         loss = reader.loss(model, adapter, table, batch)
         loss.backward()

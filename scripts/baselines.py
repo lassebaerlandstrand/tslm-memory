@@ -9,9 +9,12 @@
   ceiling and the metadata-only gate G0 (does own history add beyond the current machine read?).
 Matched models train on exactly the reader's training queries of that finding. Writes one JSON line
 per query to runs/baselines/{role}/{name}.jsonl and prints mean AUROC within strata.
+With `ret`: T-history+votes and S-history+votes add the share of the 4 most similar pool entries
+whose next ECG reports the finding (the retrieval reference, gates_retrieval.json).
 """
 
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -21,6 +24,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 
 from tslm_context.grade import auroc_within
 from tslm_context.mimic import FINDINGS, LABELS, MEASURES, bucket, earlier, next_pairs
+from tslm_context.retrieval import WithNeighbours
 from tslm_context.samples import N_HIST, Queries
 from tslm_context.waves import DATA
 
@@ -137,5 +141,46 @@ def main() -> None:
             )
 
 
+def votes(q: WithNeighbours, k: int = 4) -> np.ndarray:
+    """Share of the k most similar pool entries whose next ECG reports the finding asked about."""
+    return np.array(
+        [
+            np.mean([f in q.ecgs.loc[int(q.pool_next[s]), "labels"] for s in q.nb[i][:k]])
+            for i, f in enumerate(q.q.finding)
+        ]
+    )
+
+
+def main_ret() -> None:
+    tr = WithNeighbours("train")
+    emb = np.load(DATA / "emb.npy")
+    pca = PCA(32, random_state=0).fit(emb[tr.row[tr.q.cur_study].to_numpy()])
+    feat = Features(tr.ecgs, emb, tr.row, pca)
+    v_tr = votes(tr)
+    for role in ("val", "test"):
+        ev = WithNeighbours(role)
+        v_ev = votes(ev)
+        out = Path("runs/baselines") / role
+        for base in ("T-history", "S-history"):
+            p = np.zeros(len(ev))
+            for f in FINDINGS:
+                m_tr = (tr.q.finding == f).to_numpy()
+                x_tr = np.c_[matrix(feat, base, tr.q[m_tr]), v_tr[m_tr]]
+                y_tr = np.array([c[1] == "1" for c in tr.q.cell[m_tr]])
+                clf = HistGradientBoostingClassifier(
+                    max_iter=300, early_stopping=True, random_state=0
+                ).fit(x_tr, y_tr)
+                m = (ev.q.finding == f).to_numpy()
+                p[m] = clf.predict_proba(np.c_[matrix(feat, base, ev.q[m]), v_ev[m]])[:, 1]
+            y = np.array([ev.label(i) for i in range(len(ev))])
+            strata = np.array([ev.stratum(i) for i in range(len(ev))])
+            recs = [
+                {"i": i, "stratum": strata[i], "y": int(y[i]), "p_yes": float(p[i])}
+                for i in range(len(ev))
+            ]
+            (out / f"{base}+votes.jsonl").write_text("".join(json.dumps(r) + "\n" for r in recs))
+            print(f"{role} {base}+votes: AUROC within strata {auroc_within(y, p, strata):.3f}")
+
+
 if __name__ == "__main__":
-    main()
+    main_ret() if sys.argv[1:] == ["ret"] else main()

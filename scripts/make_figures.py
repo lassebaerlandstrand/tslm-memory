@@ -56,41 +56,75 @@ def outline(path: Path) -> None:
         tmp.replace(path)
 
 
-PANELS = {
-    "Signal only (no machine read)": [
-        ("Reader, never saw history", "S-none", GRAY),
-        ("Reader with history, none given", "S-k0", GRAY),
-        ("Reader, own 3 earlier ECGs", "S-own", BLUE),
-        ("Reader, another patient's ECGs", "S-swap", ORANGE),
-        ("Trees on embedding, current", "stat:S-current", GREEN),
-        ("Trees on embedding, with history", "stat:S-history", GREEN),
+ROWS = [
+    "Reader never trained with history",
+    "Reader trained with history, none given",
+    "Reader, own 3 earlier ECGs",
+    "Reader, another patient's earlier ECGs",
+    "Gradient-boosted trees, current ECG",
+    "Gradient-boosted trees, with history",
+]
+MEMORY = {
+    "Memory, signal only": [
+        "S-none",
+        "S-k0",
+        "S-own",
+        "S-swap",
+        "stat:S-current",
+        "stat:S-history",
     ],
-    "Text (machine read of every ECG)": [
-        ("Reader, never saw history", "T-none", GRAY),
-        ("Reader with history, none given", "T-k0", GRAY),
-        ("Reader, own 3 earlier ECGs", "T-own", BLUE),
-        ("Reader, another patient's ECGs", "T-swap", ORANGE),
-        ("Trees on machine read, current", "stat:T-current", GREEN),
-        ("Trees on machine read, with history", "stat:T-history", GREEN),
+    "Memory, with the machine read": [
+        "T-none",
+        "T-k0",
+        "T-own",
+        "T-swap",
+        "stat:T-current",
+        "stat:T-history",
     ],
 }
+COLOURS = [GRAY, GRAY, BLUE, ORANGE, GREEN, GREEN]
+RETRIEVAL = [
+    ("Reader, own history", "S-ret-own", BLUE),
+    ("+ 4 similar patients with their next ECG", "S-ret-both", BLUE),
+    ("+ 4 similar patients, next ECGs shuffled", "S-ret-shuf", ORANGE),
+    ("4 similar patients, no own history", "S-ret-nb", GRAY),
+    ("Trees with history", "stat:S-history", GREEN),
+    ("Trees with history + neighbour vote", "stat:S-history+votes", GREEN),
+]
+
+
+def dots(ax, r: dict, arms: list[str], colours: list[str]) -> None:
+    for y, (arm, color) in enumerate(zip(reversed(arms), reversed(colours), strict=True)):
+        est = r[f"auroc {arm}"]
+        lo, hi = r[f"auroc {arm} ci"]
+        ax.errorbar(
+            est, y, xerr=[[est - lo], [hi - est]], fmt="o", ms=3.5, color=color, capsize=2, lw=1
+        )
+    ax.axvline(0.5, color=GRAY, lw=0.6, ls=":")
 
 
 def main() -> None:
     style()
     r = json.loads(Path("runs/results.json").read_text())
-    fig, axes = plt.subplots(1, 2, figsize=(7.0, 1.9), sharex=True, gridspec_kw={"wspace": 1.1})
-    for ax, (title, rows) in zip(axes, PANELS.items(), strict=True):
-        for y, (_label, arm, color) in enumerate(reversed(rows)):
-            est = r[f"auroc {arm}"]
-            lo, hi = r[f"auroc {arm} ci"]
-            ax.errorbar(
-                est, y, xerr=[[est - lo], [hi - est]], fmt="o", ms=3.5, color=color, capsize=2, lw=1
-            )
-        ax.set_yticks(range(len(rows)), [lab for lab, _, _ in reversed(rows)])
-        ax.axvline(0.5, color=GRAY, lw=0.6, ls=":")
+    ret = "auroc S-ret-both" in r
+    fig = plt.figure(figsize=(7.0, 3.3 if ret else 1.9))
+    grid = fig.add_gridspec(2 if ret else 1, 2, height_ratios=[1, 1] if ret else [1], hspace=0.7)
+    axes = [fig.add_subplot(grid[0, 0]), fig.add_subplot(grid[0, 1])]
+    for ax, (title, arms) in zip(axes, MEMORY.items(), strict=True):
+        dots(ax, r, arms, COLOURS)
+        ax.set_yticks(range(len(ROWS)), list(reversed(ROWS)))
         ax.set_title(title, loc="left")
-        ax.set_xlabel("AUROC within finding and current state")
+    axes[1].set_yticklabels([])
+    if ret:
+        ax = fig.add_subplot(grid[1, :])
+        dots(ax, r, [a for _, a, _ in RETRIEVAL], [c for _, _, c in RETRIEVAL])
+        ax.set_yticks(range(len(RETRIEVAL)), [lab for lab, _, _ in reversed(RETRIEVAL)])
+        ax.set_title("Retrieval on top of memory, signal only", loc="left")
+        axes.append(ax)
+    his = [v[1] for k, v in r.items() if k.endswith(" ci")]
+    for ax in axes:
+        ax.set_xlim(0.48, max(his) + 0.01)
+    axes[-1].set_xlabel("AUROC within finding and current state (95 % interval)")
     out = PROPOSAL / "fig_context.pdf"
     fig.savefig(out)
     outline(out)
