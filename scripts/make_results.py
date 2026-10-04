@@ -1,5 +1,5 @@
 """Write runs/results.json and the LaTeX macros for the proposal
-(../proposal/tslm-context-results.tex) from runs/results_confirm.json and the query counts.
+(proposal/tslm-context-results.tex) from runs/results_confirm.json and the query counts.
 Prints aggregates only."""
 
 import json
@@ -10,7 +10,7 @@ from confirm_results import committed
 
 from tslm_memory_poc.samples import Queries
 
-OUT = Path(__file__).resolve().parents[2] / "proposal" / "tslm-context-results.tex"
+OUT = Path(__file__).resolve().parents[1] / "proposal" / "tslm-context-results.tex"
 
 
 def macro(key: str) -> str:

@@ -1,4 +1,4 @@
-"""Figure for the proposal: ../proposal/fig_memory.pdf, from runs/results.json.
+"""Figure for the proposal: proposal/fig_memory.pdf, from runs/results.json.
 
 The frozen reader on the fresh confirmation patients: without history, with only the dates of the
 patient's earlier ECGs, with the earlier ECGs themselves, and with another patient's. Style
@@ -20,7 +20,7 @@ mpl.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib import font_manager as fm  # noqa: E402
 
-PROPOSAL = Path(__file__).resolve().parents[2] / "proposal"
+PROPOSAL = Path(__file__).resolve().parents[1] / "proposal"
 BLUE, SKY, ORANGE, GRAY = "#0072B2", "#56B4E9", "#E69F00", "#999999"
 BARS = [
     ("No history", "probe-S-none", GRAY),
