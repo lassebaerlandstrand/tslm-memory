@@ -10,7 +10,7 @@ import re
 import numpy as np
 import pandas as pd
 
-from tslm_memory.waves import DATA
+from tslm_memory_poc.waves import DATA
 
 # A qualifier makes a finding "possible" when it precedes the finding within the same clause
 # ("probable atrial fibrillation"), not when it belongs to another clause of the line

@@ -1,4 +1,4 @@
-"""Select the readout-B queries (see tslm_memory.selection) and list the records to fetch.
+"""Select the readout-B queries (see tslm_memory_poc.selection) and list the records to fetch.
 
 The confirmation role is drawn afterwards from bucket 1 subjects no other role uses, so the other
 roles are the same with or without it.
@@ -13,9 +13,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from tslm_memory.mimic import canonical_table
-from tslm_memory.selection import CONFIRM, select, to_fetch
-from tslm_memory.waves import DATA
+from tslm_memory_poc.mimic import canonical_table
+from tslm_memory_poc.selection import CONFIRM, select, to_fetch
+from tslm_memory_poc.waves import DATA
 
 PER_CELL = {"test": 200, "val": 25, "train": 500}
 CONFIRM_PER_CELL = {"confirm": 200}

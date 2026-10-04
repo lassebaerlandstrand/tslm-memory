@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from tslm_memory.mimic import bucket
-from tslm_memory.selection import BUCKETS, CONFIRM, N_HIST, select, to_fetch
+from tslm_memory_poc.mimic import bucket
+from tslm_memory_poc.selection import BUCKETS, CONFIRM, N_HIST, select, to_fetch
 
 PER_CELL = {"test": 2, "val": 1, "train": 3}
 

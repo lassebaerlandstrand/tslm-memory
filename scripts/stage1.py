@@ -29,10 +29,10 @@ import torch
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import balanced_accuracy_score, r2_score
 
-from tslm_memory import reader
-from tslm_memory.mimic import FINDINGS
-from tslm_memory.samples import Queries, machine_read
-from tslm_memory.waves import DATA
+from tslm_memory_poc import reader
+from tslm_memory_poc.mimic import FINDINGS
+from tslm_memory_poc.samples import Queries, machine_read
+from tslm_memory_poc.waves import DATA
 
 EPOCHS, BATCH, LR, WD = 3, 32, 1e-3, 0.05
 

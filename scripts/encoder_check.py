@@ -17,8 +17,8 @@ from huggingface_hub import snapshot_download
 from opentslm.model.encoder.TransformerCNNEncoder import TransformerCNNEncoder
 from opentslm.model.projector.MLPProjector import MLPProjector
 
-from tslm_memory.reader import REPO
-from tslm_memory.waves import DATA, read500
+from tslm_memory_poc.reader import REPO
+from tslm_memory_poc.waves import DATA, read500
 
 
 def main(n: int = 64) -> None:

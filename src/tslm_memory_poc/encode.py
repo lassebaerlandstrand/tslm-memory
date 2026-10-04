@@ -4,8 +4,8 @@ embedding per 12-lead record, the only way a recording enters the reader."""
 import numpy as np
 import torch
 
-from tslm_memory.net1d import Net1D
-from tslm_memory.waves import DATA
+from tslm_memory_poc.net1d import Net1D
+from tslm_memory_poc.waves import DATA
 
 
 def ecgfounder():

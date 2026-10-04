@@ -1,5 +1,5 @@
 [project]
-name = "tslm-memory"
+name = "tslm-memory-poc"
 version = "0.1.0"
 description = "Memory for time-series language models: the model reads the same person's earlier recordings. Proof of concept on ECG."
 readme = "README.md"

@@ -1,4 +1,4 @@
-# tslm-memory
+# tslm-memory-poc
 
 Memory for time-series language models (TSLMs). A TSLM answers questions about one recording at a
 time. Here it also reads the same person's earlier recordings, each compressed into a few tokens

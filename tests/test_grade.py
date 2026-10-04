@@ -1,7 +1,7 @@
 import numpy as np
 
-from tslm_memory.grade import auroc_within, bootstrap, ci
-from tslm_memory.waves import unusable
+from tslm_memory_poc.grade import auroc_within, bootstrap, ci
+from tslm_memory_poc.waves import unusable
 
 
 def test_persistence_scores_half_within_strata():

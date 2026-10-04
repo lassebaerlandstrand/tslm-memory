@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tslm_memory.samples import Queries, swap_partners
-from tslm_memory.selection import select
+from tslm_memory_poc.samples import Queries, swap_partners
+from tslm_memory_poc.selection import select
 
 PER_CELL = {"test": 6, "val": 1, "train": 3}
 

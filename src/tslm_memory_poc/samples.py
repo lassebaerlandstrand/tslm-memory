@@ -10,8 +10,8 @@ stratum; the dates-only control keeps the offsets and drops the recordings.
 import numpy as np
 import pandas as pd
 
-from tslm_memory.mimic import MEASURES
-from tslm_memory.waves import DATA
+from tslm_memory_poc.mimic import MEASURES
+from tslm_memory_poc.waves import DATA
 
 N_HIST = 3
 PER_CELL = {"test": 200, "val": 25, "train": 500, "confirm": 200}

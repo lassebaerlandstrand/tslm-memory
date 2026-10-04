@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tslm_memory.mimic import FINDINGS
+from tslm_memory_poc.mimic import FINDINGS
 
 
 @pytest.fixture(scope="session")

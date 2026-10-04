@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from tslm_memory.grade import auroc_within, bootstrap, ci
+from tslm_memory_poc.grade import auroc_within, bootstrap, ci
 
 SEEDS = [0, 1, 2]
 ARMS = ["probe-S-none", "probe-S-dates", "probe-S-own", "probe-S-swap"]
