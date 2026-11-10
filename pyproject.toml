@@ -1,0 +1,45 @@
+[project]
+name = "tslm-memory"
+version = "0.1.0"
+description = "A general memory system for time-series language models"
+readme = "README.md"
+authors = [
+    { name = "Lasse Bærland Strand", email = "lstrand.research@gmail.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "chronos-forecasting>=2.3.2",
+    "huggingface-hub>=2.4.0",
+    "matplotlib>=3.11.2",
+    "numpy>=2.5.4",
+    "openpyxl>=3.1.5",
+    "opentslm",
+    "pandas>=3.1.1",
+    "peft>=0.21.2",
+    "pyarrow>=26.0.1",
+    "scipy>=1.18.1",
+    "torch>=2.15.0",
+    "transformers>=5.22.1",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.9,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.7",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.uv.sources]
+opentslm = { git = "https://github.com/StanfordBDHG/OpenTSLM", rev = "2968f4b891baab4307f7e9d0043e87677b593a30" }
